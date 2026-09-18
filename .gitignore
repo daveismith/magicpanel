@@ -1,0 +1,12 @@
+# build outputs
+build/
+runs/
+spikes/spike_a_i2c
+spikes/spike_b_frames
+*.dSYM/
+*.o
+# local toolchain (installed by `make setup`, cached in CI)
+tools/bin/
+tools/arduino-data/
+.venv/
+__pycache__/

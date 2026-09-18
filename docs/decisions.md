@@ -9,9 +9,11 @@ that needs confirmation from the hardware owner.
 the **leftmost** column and bit 0 as the rightmost; row 0 is the top. Evidence is only the
 authors' comments (`TraceRight` "left to right" starts at bit 7; `Quadrant` type 1 "TL first"
 lights `B11110000`). If the real panel is mirrored, every baseline is still internally
-consistent; only the human-readable filmstrip would be flipped. Confirm against hardware.
+consistent; only the human-readable filmstrip would be flipped.
+*2026-09-17: owner agrees this sounds right; provisional until checked on hardware.*
 
 **A-2 — D13 reads HIGH when unjumpered.** See firmware-map R-7. Simulation default is HIGH.
+*2026-09-17: confirmed by owner — the Magic Panel PCB has no LED on D13.*
 
 **D-1 — ADC3 left undriven.** `randomSeed(analogRead(A3))` therefore receives 0 and is ignored,
 giving the avr-libc default seed. Rationale: any injected constant would be equally arbitrary,
@@ -33,9 +35,14 @@ starts writing unwired bits still changes the canonical sequence and fails the c
 
 **D-4 — FQBN.** `arduino:avr:diecimila:cpu=atmega328` (the core's ID for the IDE entry
 "Arduino Duemilanove or Diecimila"). The brief's `arduino:avr:duemilanove` does not exist.
+*2026-09-17: accepted by owner.*
 
 **D-5 — Time origin.** Cycle 0 = sketch reset vector; the ~1 s bootloader is not simulated.
 
-**D-6 — I2C stimulus is one byte per command.** Multi-byte writes deafen the firmware until
-reset (firmware-map §3.3); the scenario schema still allows multi-byte writes so that the
-"garbage command" scenario can baseline that behaviour deliberately.
+**D-6 — I2C stimulus: harness supports arbitrary-length writes and reads.** Today's firmware
+uses one byte per command and is deafened by multi-byte writes until reset (firmware-map
+§3.3). The owner wants multi-byte commands in a future firmware, so the harness's I2C master
+is byte-count agnostic (any N ≥ 0, plus master reads), and the "garbage command" scenario
+baselines the current deafening behaviour deliberately. The known command-handler bugs
+(case 2 fall-through, `allOFF;` no-op, FadeOutIn overrun) are acknowledged by the owner and
+baselined as-is.
