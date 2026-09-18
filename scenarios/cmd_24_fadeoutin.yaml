@@ -1,0 +1,8 @@
+name: cmd_24_fadeoutin
+description: "I2C command 24: FadeOutIn(1) out then in"
+firmware_reset: true
+eeprom: default
+run_ms: 5700
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [24] }

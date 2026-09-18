@@ -1,0 +1,8 @@
+name: mode_9_random
+description: "Jumper/rotary mode 9 (B5 low at power-on): Random(8000..14000) jumper 2"
+firmware_reset: true
+eeprom: default
+run_ms: 26300
+steps:
+  - at_ms: 0
+    gpio_set: { pin: B5, value: 0 }

@@ -1,0 +1,8 @@
+name: mode_8_allontimed
+description: "Jumper/rotary mode 8 (B3 low at power-on): allONTimed(0) jumper 1"
+firmware_reset: true
+eeprom: default
+run_ms: 1500
+steps:
+  - at_ms: 0
+    gpio_set: { pin: B3, value: 0 }

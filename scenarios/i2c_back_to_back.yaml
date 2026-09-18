@@ -1,0 +1,12 @@
+name: i2c_back_to_back
+description: "Three commands queued with no gap: Symbol, then Cross, then allOFF; each later command nests inside the previous handler"
+firmware_reset: true
+eeprom: default
+run_ms: 9000
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [33] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [20] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [0] }

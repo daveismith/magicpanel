@@ -1,0 +1,8 @@
+name: cmd_19_compress_type2
+description: "I2C command 19: Compress(5,2) ring"
+firmware_reset: true
+eeprom: default
+run_ms: 6500
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [19] }

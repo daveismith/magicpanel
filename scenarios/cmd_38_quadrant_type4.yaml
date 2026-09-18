@@ -1,0 +1,8 @@
+name: cmd_38_quadrant_type4
+description: "I2C command 38: Quadrant(5,4) TL,BL,BR,TR"
+firmware_reset: true
+eeprom: default
+run_ms: 5400
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [38] }

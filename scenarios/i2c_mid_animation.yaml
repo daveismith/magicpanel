@@ -1,0 +1,10 @@
+name: i2c_mid_animation
+description: "Cross (3 s) sent while Toggle (10 s) is running: nested receiveEvent inside the TWI ISR; the outer Toggle resumes after Cross finishes"
+firmware_reset: true
+eeprom: default
+run_ms: 15000
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [5] }
+  - at_ms: 2100
+    i2c_write: { addr: 0x14, bytes: [20] }

@@ -1,0 +1,8 @@
+name: cmd_23_eyescan
+description: "I2C command 23: EyeScan(2,100)"
+firmware_reset: true
+eeprom: default
+run_ms: 5000
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [23] }

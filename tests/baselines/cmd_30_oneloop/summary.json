@@ -1,0 +1,146 @@
+{
+  "build": {
+    "build_flags": {
+      "SOURCE_DATE_EPOCH": "0",
+      "date_time": "-Werror=date-time",
+      "prefix_map": "-fdebug-prefix-map=<repo>=."
+    },
+    "date_macro_hits": [],
+    "elf": {
+      "absolute_repo_path_in_elf": false,
+      "deterministic": true,
+      "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
+      "flash_bytes": 13700,
+      "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
+      "path": "build/firmware.elf",
+      "reference": {
+        "elf_sha256": "36099b3475506f998d7c7374fa53c522d365db38452210c0f321c91da0414966",
+        "flash_matches": true,
+        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
+        "path": "/Users/davids/Documents/Source/git/magicpanel/MagicPanel_v010_5.ino.elf"
+      },
+      "second_build": {
+        "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
+        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a"
+      }
+    },
+    "firmware_git": {
+      "dirty": false,
+      "sha": "8508e6277dd7546abf7d9ccd8ffe422367f4055b"
+    },
+    "sketch": {
+      "bytes": 57565,
+      "path": "MagicPanel_v010_5.ino",
+      "sha256": "f213fd7a68dd00307d1231cb648f2f7b223c4232dbc9780440ecc2253de6b638"
+    },
+    "toolchain": {
+      "arduino_cli_commit": "01f3d4f2b",
+      "arduino_cli_version": "1.5.1",
+      "avr_gcc_package": "7.3.0-atmel3.6.1-arduino7",
+      "compiler": "avr-gcc (GCC) 7.3.0",
+      "core": "arduino:avr",
+      "core_version": "1.8.6",
+      "fqbn": "arduino:avr:diecimila:cpu=atmega328",
+      "host": {
+        "platform": "darwin",
+        "python": "3.14.4"
+      },
+      "libraries": {
+        "LedControl": {
+          "git_sha": "2714e8b1ca1a8fcc7f6b6d5e77025cb5eb702c3e",
+          "source": "third_party/LedControl (submodule)",
+          "version": "1.0.6"
+        },
+        "Wire": {
+          "source": "bundled with arduino:avr core",
+          "version": "1.8.6"
+        }
+      }
+    }
+  },
+  "canonical_hash": "6723cdef0ee156394cf02c5ed36b94d1d982e023b67f54aa1c701a8fa2a0db5d",
+  "counts": {
+    "display_changes": 71,
+    "empty_latches": 1,
+    "events": 4,
+    "frames": 1432,
+    "gpio_changes": 9,
+    "i2c_transactions": 1,
+    "latches": 716,
+    "malformed_bursts": 0,
+    "script_steps": 2
+  },
+  "diagnostics": [],
+  "eeprom": "default:0xff",
+  "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
+  "f_cpu": 16000000,
+  "final_display": {
+    "decode": [
+      0,
+      0
+    ],
+    "display_test": [
+      false,
+      false
+    ],
+    "grid": [
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000"
+    ],
+    "intensity": [
+      15,
+      15
+    ],
+    "orphan_bits": 0,
+    "rows_hex": [
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00"
+    ],
+    "scan_limit": [
+      7,
+      7
+    ],
+    "shutdown": [
+      false,
+      false
+    ]
+  },
+  "firmware": {
+    "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
+    "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb"
+  },
+  "harness_version": "0.1.0",
+  "markers": [
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 30 OneLoop(2)"
+    }
+  ],
+  "mcu": "atmega328p",
+  "scenario": {
+    "description": "I2C command 30: OneLoop(2)",
+    "name": "cmd_30_oneloop",
+    "run_ms": 6300,
+    "sha256": "7a78fdd2368b3537cf70e2049057f4efcbd4398e623de72c1c69aa54b56b36eb",
+    "timing_tolerance_cycles": 0,
+    "timing_tolerance_reason": ""
+  },
+  "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-cmd_30_oneloop/stimulus.script",
+  "status": "ok",
+  "timing_hash": "f6e633714a25847cddd84ce67e6bc310badeee9e279613295c81a9cb96189091",
+  "total_cycles": 100800000,
+  "total_ns": 6300000000.0
+}

@@ -1,0 +1,8 @@
+name: cmd_00_alloff
+description: "I2C command 0: allOFF"
+firmware_reset: true
+eeprom: default
+run_ms: 1300
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [0] }

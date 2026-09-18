@@ -1,0 +1,8 @@
+name: mode_2_flashall
+description: "Jumper/rotary mode 2 (C1 low at power-on): FlashAll(8,200) repeating"
+firmware_reset: true
+eeprom: default
+run_ms: 7800
+steps:
+  - at_ms: 0
+    gpio_set: { pin: C1, value: 0 }

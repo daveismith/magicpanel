@@ -1,0 +1,8 @@
+name: cmd_17_expand_type2
+description: "I2C command 17: Expand(5,2) ring"
+firmware_reset: true
+eeprom: default
+run_ms: 6500
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [17] }

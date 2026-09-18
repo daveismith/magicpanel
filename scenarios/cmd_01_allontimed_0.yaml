@@ -1,0 +1,8 @@
+name: cmd_01_allontimed_0
+description: "I2C command 1: allONTimed(0) panel on indefinitely (observe ON state only; the handler blocks for 1000 s)"
+firmware_reset: true
+eeprom: default
+run_ms: 1500
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [1] }

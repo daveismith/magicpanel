@@ -1,0 +1,8 @@
+name: cmd_06_alert
+description: "I2C command 6: Alert(8)"
+firmware_reset: true
+eeprom: default
+run_ms: 5400
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [6] }

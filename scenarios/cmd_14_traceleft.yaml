@@ -1,0 +1,8 @@
+name: cmd_14_traceleft
+description: "I2C command 14: TraceLeft(5,1) fill"
+firmware_reset: true
+eeprom: default
+run_ms: 9800
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [14] }

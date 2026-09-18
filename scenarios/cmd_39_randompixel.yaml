@@ -1,0 +1,8 @@
+name: cmd_39_randompixel
+description: "I2C command 39: RandomPixel(40)"
+firmware_reset: true
+eeprom: default
+run_ms: 7700
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [39] }

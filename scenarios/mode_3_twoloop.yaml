@@ -1,0 +1,10 @@
+name: mode_3_twoloop
+description: "Jumper/rotary mode 3 (C1, C2 low at power-on): TwoLoop(2) repeating"
+firmware_reset: true
+eeprom: default
+run_ms: 11100
+steps:
+  - at_ms: 0
+    gpio_set: { pin: C1, value: 0 }
+  - at_ms: 0
+    gpio_set: { pin: C2, value: 0 }

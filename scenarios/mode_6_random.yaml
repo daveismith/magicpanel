@@ -1,0 +1,10 @@
+name: mode_6_random
+description: "Jumper/rotary mode 6 (C0, C1 low at power-on): Random(8000..14000)"
+firmware_reset: true
+eeprom: default
+run_ms: 26300
+steps:
+  - at_ms: 0
+    gpio_set: { pin: C0, value: 0 }
+  - at_ms: 0
+    gpio_set: { pin: C1, value: 0 }

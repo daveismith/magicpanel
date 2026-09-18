@@ -1,0 +1,8 @@
+name: cmd_08_traceup
+description: "I2C command 8: TraceUp(5,1) fill"
+firmware_reset: true
+eeprom: default
+run_ms: 9800
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [8] }

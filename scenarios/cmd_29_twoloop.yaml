@@ -1,0 +1,8 @@
+name: cmd_29_twoloop
+description: "I2C command 29: TwoLoop(2)"
+firmware_reset: true
+eeprom: default
+run_ms: 6300
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [29] }

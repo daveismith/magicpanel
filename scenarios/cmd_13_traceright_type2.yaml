@@ -1,0 +1,8 @@
+name: cmd_13_traceright_type2
+description: "I2C command 13: TraceRight(5,2) single column"
+firmware_reset: true
+eeprom: default
+run_ms: 9800
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [13] }

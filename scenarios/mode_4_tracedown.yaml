@@ -1,0 +1,8 @@
+name: mode_4_tracedown
+description: "Jumper/rotary mode 4 (C0 low at power-on): TraceDown(5,1) repeating"
+firmware_reset: true
+eeprom: default
+run_ms: 17800
+steps:
+  - at_ms: 0
+    gpio_set: { pin: C0, value: 0 }

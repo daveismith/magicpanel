@@ -1,0 +1,7 @@
+name: power_on_default
+description: "No stimulus: constructor + setup() init sequence, then idle in mode 0 awaiting I2C"
+firmware_reset: true
+eeprom: default
+run_ms: 2000
+steps:
+

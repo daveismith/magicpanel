@@ -1,0 +1,23 @@
+name: i2c_garbage
+description: "Invalid and malformed I2C traffic: unknown command, empty write, foreign address, then a 2-byte write which executes its first byte (Cross) and then deafens the firmware (firmware-map 3.3), so the following FlashAll must NOT run; ends with a master read"
+firmware_reset: true
+eeprom: default
+run_ms: 9000
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [200] }
+    label: "unknown command 200"
+  - at_ms: 300
+    i2c_write: { addr: 0x14, bytes: [] }
+    label: "empty write (address only)"
+  - at_ms: 500
+    i2c_write: { addr: 0x15, bytes: [20] }
+    label: "Cross to foreign address 0x15"
+  - at_ms: 700
+    i2c_write: { addr: 0x14, bytes: [20, 5] }
+    label: "2-byte write [20, 5]: Cross, then receiver deafened"
+  - at_ms: 4500
+    i2c_write: { addr: 0x14, bytes: [26] }
+    label: "cmd 26 FlashAll after deafening (expect ignored)"
+  - at_ms: 8500
+    i2c_read: { addr: 0x14, n: 2 }

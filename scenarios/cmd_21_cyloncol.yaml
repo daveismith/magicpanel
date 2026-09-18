@@ -1,0 +1,8 @@
+name: cmd_21_cyloncol
+description: "I2C command 21: CylonCol(2,140)"
+firmware_reset: true
+eeprom: default
+run_ms: 5400
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [21] }

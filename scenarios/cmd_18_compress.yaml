@@ -1,0 +1,8 @@
+name: cmd_18_compress
+description: "I2C command 18: Compress(5,1) filled"
+firmware_reset: true
+eeprom: default
+run_ms: 6500
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [18] }

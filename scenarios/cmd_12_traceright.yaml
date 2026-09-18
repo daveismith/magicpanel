@@ -1,0 +1,8 @@
+name: cmd_12_traceright
+description: "I2C command 12: TraceRight(5,1) fill"
+firmware_reset: true
+eeprom: default
+run_ms: 9800
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [12] }

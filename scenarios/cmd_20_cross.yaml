@@ -1,0 +1,8 @@
+name: cmd_20_cross
+description: "I2C command 20: Cross"
+firmware_reset: true
+eeprom: default
+run_ms: 4300
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [20] }

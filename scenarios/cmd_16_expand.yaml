@@ -1,0 +1,8 @@
+name: cmd_16_expand
+description: "I2C command 16: Expand(5,1) filled"
+firmware_reset: true
+eeprom: default
+run_ms: 6500
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [16] }

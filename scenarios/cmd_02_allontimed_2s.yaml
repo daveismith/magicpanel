@@ -1,0 +1,8 @@
+name: cmd_02_allontimed_2s
+description: "I2C command 2: allONTimed(2000) falls through to allONTimed(5000)"
+firmware_reset: true
+eeprom: default
+run_ms: 8700
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [2] }

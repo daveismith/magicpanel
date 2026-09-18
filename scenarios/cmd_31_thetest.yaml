@@ -1,0 +1,8 @@
+name: cmd_31_thetest
+description: "I2C command 31: TheTest(30)"
+firmware_reset: true
+eeprom: default
+run_ms: 5300
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [31] }

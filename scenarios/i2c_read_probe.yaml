@@ -1,0 +1,10 @@
+name: i2c_read_probe
+description: "Master read from the slave (no onRequest handler: firmware answers a single 0x00), then allOFF"
+firmware_reset: true
+eeprom: default
+run_ms: 1500
+steps:
+  - at_ms: 100
+    i2c_read: { addr: 0x14, n: 2 }
+  - at_ms: 400
+    i2c_write: { addr: 0x14, bytes: [0] }

@@ -1,0 +1,8 @@
+name: cmd_34_mysymbol
+description: "I2C command 34: MySymbol 2GWD"
+firmware_reset: true
+eeprom: default
+run_ms: 5400
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [34] }

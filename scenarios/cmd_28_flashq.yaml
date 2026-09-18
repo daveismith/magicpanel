@@ -1,0 +1,8 @@
+name: cmd_28_flashq
+description: "I2C command 28: FlashQ(8,200)"
+firmware_reset: true
+eeprom: default
+run_ms: 4600
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [28] }

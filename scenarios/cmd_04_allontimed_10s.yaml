@@ -1,0 +1,8 @@
+name: cmd_04_allontimed_10s
+description: "I2C command 4: allONTimed(10000)"
+firmware_reset: true
+eeprom: default
+run_ms: 12000
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [4] }
