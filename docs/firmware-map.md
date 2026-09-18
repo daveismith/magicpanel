@@ -1,7 +1,9 @@
 # Firmware map — `MagicPanel_v010_5.ino`
 
-Phase 0 reconnaissance. Every claim below is anchored to a file/line in the sketch, the
-Arduino AVR core 1.8.6, the LedControl 1.0.6 library, or the precompiled ELF.
+Reconnaissance (Phase 0), updated with what the simulation confirmed (Phases 1–6). Every claim
+below is anchored to a file/line in the sketch, the Arduino AVR core 1.8.6, the LedControl
+1.0.6 library, or the precompiled ELF. *Confirmed in simulation* notes mark facts that were
+measured with the harness rather than read from source.
 
 Specimen under test:
 
@@ -26,7 +28,7 @@ the part (`atmega328p`) and frequency (16 MHz) explicitly when loading it.
 | MCU | ATmega328P | ELF device note; `boards.txt:175` `diecimila.menu.cpu.atmega328.build.mcu=atmega328p` |
 | F_CPU | 16 000 000 Hz | `boards.txt:158` `diecimila.build.f_cpu=16000000L`; sketch comment L67 "load … as Arduino Duemilanove w/ ATmega328" |
 | IDE board name | "Arduino Duemilanove or Diecimila" (shows as *Arduino Duemilanove* in IDE 2.3.10) | `boards.txt:143` |
-| **FQBN** | **`arduino:avr:diecimila:cpu=atmega328`** | The core's board ID is `diecimila`; there is no `duemilanove` ID. The FQBN in the project brief (`arduino:avr:duemilanove:cpu=atmega328`) will not resolve and Phase 2 will use `diecimila`. |
+| **FQBN** | **`arduino:avr:diecimila:cpu=atmega328`** | The core's board ID is `diecimila`; there is no `duemilanove` ID. The brief's `arduino:avr:duemilanove:cpu=atmega328` does not resolve. *Confirmed:* building with this FQBN, core 1.8.6 and LedControl 1.0.6 reproduces the specimen ELF's flash image byte for byte (`tools/build_firmware.py --compare-elf`). |
 | Fuses (from board def) | low `0xFF`, high `0xDA`, ext `0xFD` | `boards.txt:154,171,172` |
 | Fuse meaning | ext crystal, full-swing, slow-rising power; BOOTSZ=2 KB, BOOTRST=1 (reset vector → bootloader); BOD 2.7 V | Datasheet decode of the above |
 | Bootloader | `ATmegaBOOT_168_atmega328.hex` at 0x7800; waits ~1 s for STK500 traffic, then jumps to 0x0000 | `boards.txt:173` |
@@ -98,7 +100,7 @@ Note that D11/D13 (PB3/PB5) are the hardware MOSI/SCK pins but are used here as 
 | Latch | LOAD/CS **rising edge** after 32 clocks | `LedControl.cpp:208` |
 | CS during shifting | LOW (MAX7221 requires CS low to accept clocks) | `LedControl.cpp:203` |
 | Clock idle | LOW | `shiftOut` leaves CLK low |
-| Speed | ~10-15 µs per bit (three `digitalWrite`s), so ≈ 0.4-0.5 ms per 32-bit burst, ≈ 7-8 ms for a full `PrintGrid()` (16 bursts). To be measured exactly in Spike B. | |
+| Speed | *Confirmed in simulation:* 7 513–7 553 cycles per 32-bit burst (≈ 470 µs, ≈ 14.7 µs/bit), so a full `PrintGrid()` (16 bursts) takes ≈ 7.5 ms and the panel visibly updates row-pair by row-pair over that window. | Spike B / `frames.jsonl` |
 
 ### 2.5 Registers actually written
 
@@ -198,8 +200,13 @@ Consequences:
 - `twi.c:605` releases the bus (`twi_releaseBus`) *before* the callback, so the slave keeps
   ACKing its address during an animation. A second command arriving mid-animation re-enters
   `__vector_24` → nested `receiveEvent` → nested animation. When the inner one returns, the
-  **outer animation resumes where it left off**. (Scenario "command sent mid-animation" must
-  expect this, not a cancel.)
+  **outer animation resumes where it left off**. *Confirmed in simulation* (`i2c_mid_animation`,
+  `i2c_back_to_back`).
+- *Confirmed in simulation:* if the nested interrupt lands **inside a `shiftOut()` burst**, the
+  nested handler's own bursts are clocked while LOAD is still low, so the chips latch the last
+  32 of 48+ bits and the outer burst's remaining bits are lost (LOAD is already high when the
+  outer `spiTransfer` finishes). The harness logs this as a `malformed_burst` diagnostic and
+  renders exactly what the chips would show; it happens in `i2c_back_to_back` at 101.47 ms.
 - The main `loop()` is starved for the duration; the jumper/rotary inputs are not re-read
   until the handler returns.
 
@@ -416,9 +423,8 @@ problem, but a protocol trap that scenario authors must respect.
 
 **R-7 — D13 jumper vs on-board LED.** On a stock Duemilanove, D13 has an LED + 1 kΩ to ground,
 which would overpower the ~30 kΩ internal pull-up and read LOW → permanent `DigInState = 9`
-(Random mode). The sketch clearly expects D13 to read HIGH when unjumpered, so the Magic Panel
-PCB presumably has no LED there. **Needs confirmation from the hardware owner.** In simulation
-D13 reads HIGH (pull-up) unless a scenario drives it.
+(Random mode). *Resolved 2026-09-17: the owner confirms the Magic Panel PCB has no LED on D13.*
+In simulation D13 reads HIGH (pull-up) unless a scenario drives it.
 
 **R-8 — Bootloader not modelled.** Real power-on runs `ATmegaBOOT` for ~1 s (and blinks PB5)
 before the sketch starts. Harness time origin = sketch reset. Only absolute offsets differ.
@@ -427,12 +433,16 @@ before the sketch starts. Harness time origin = sketch reset. Only absolute offs
 stretching and multi-master arbitration are abstracted into `avr_twi_msg` IRQs. Slave address
 matching against `TWAR`/`TWAMR` exists (`avr_twi.c:~520`), and the states it emits
 (`SRX_ADR_ACK 0x60`, `SRX_ADR_DATA_ACK 0x80`, `SRX_STOP_RESTART 0xA0`) are the ones `twi.c`
-needs. To be proven in Spike A. General-call is not implemented in simavr (unused here).
+needs. *Proven in Spike A.* Three simavr artefacts were found and worked around in the
+harness's master (decisions D-9 to D-11): stale slave state raises a spurious data interrupt on
+a START for another address; STOP after a slave-transmit delivers 0xA0; a START immediately
+after STOP can cancel the pending STOP state. General-call is not implemented (unused here).
 
-**R-10 — Display is not updated atomically.** A `PrintGrid()` takes ~7-8 ms and latches 16
-times; `display.jsonl` will record every intermediate latch that changes the rendered grid. This
-is faithful (the real panel shows it) but multiplies record counts by up to 16 per "frame". A
-derived "settled" view can be added in Phase 4 if the raw one proves noisy for humans.
+**R-10 — Display is not updated atomically.** A `PrintGrid()` takes ~7.5 ms and latches 16
+times; `display.jsonl` records every intermediate latch that changes the rendered grid. This
+is faithful (the real panel shows it) but multiplies record counts by up to 16 per "frame"
+(e.g. `cmd_20_cross` = 31 states, `cmd_05_toggle` = 327). Diff reports name the pattern via
+the scenario's markers so the intermediate states do not obscure what changed.
 
 **R-11 — Bit-bang decode depends on exact edge ordering.** `shiftOut` writes DATA then raises
 CLK as separate instructions, so ordering is unambiguous in simavr's IRQ stream. But any future
@@ -442,6 +452,11 @@ frames from either source, so a silent switch shows up as a diff rather than as 
 
 **R-12 — No `.mmcu` section in the ELF.** Harness must set `atmega328p` / 16 MHz itself. Fuses
 (BOD, clock source) are not simulated; irrelevant to behaviour.
+
+**R-13 — Alert vs FlashAll are the same *sequence*.** `Alert(8)` (250 ms on/off) and
+`FlashAll(8,200)` (200 ms on/off) produce identical canonical display sequences and differ only
+in timing; so do `allONTimed(5000)` vs `(10000)` vs `(0)`. Only the timing comparison (default
+tolerance 0 cycles) tells them apart, which is why timing is part of the pass criterion.
 
 Not present, so not a risk: watchdog, brown-out handling, sleep modes, ADC noise beyond R-1,
 floating inputs other than A3 (all mode pins have pull-ups), EEPROM, UART.
