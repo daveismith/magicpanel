@@ -10,3 +10,4 @@ tools/bin/
 tools/arduino-data/
 .venv/
 __pycache__/
+harness/mpsim

@@ -32,7 +32,7 @@
 
 typedef struct step {
     avr_cycle_count_t cycle;
-    enum { STEP_I2C_WRITE, STEP_I2C_READ, STEP_GPIO_SET, STEP_MARKER } kind;
+    enum { STEP_I2C_WRITE, STEP_I2C_READ, STEP_GPIO_SET, STEP_GPIO_RELEASE, STEP_MARKER } kind;
     uint8_t addr; uint8_t data[I2C_MAX_BYTES]; int n;
     char port; int pin; int value;
     char text[128];
@@ -59,6 +59,7 @@ typedef struct sim {
     i2c_txn_t last_txn; int have_last_txn;
     const char *elf_path, *eeprom_path, *script_path;
     int stopped; char stop_reason[64];
+    uint8_t ext_mask[3], ext_value[3];     /* externally driven pin levels per port B,C,D */
 } sim_t;
 
 static sim_t *G;   /* for the logger only */
@@ -180,10 +181,36 @@ static void on_i2c_done(void *param, const i2c_txn_t *t) {
 }
 
 /* ------------------------------------------------------------------ stimulus */
+/* Drive a pin from outside. simavr re-derives input pin levels on every PORT/DDR write
+ * (internal pull-ups win unless an 'external' level is registered), so we register the level
+ * as an external pull AND raise the pin IRQ for immediate effect. */
+static void apply_external(sim_t *s, char port) {
+    int pi = port - 'B';
+    avr_ioport_external_t e = { .name = port, .mask = s->ext_mask[pi], .value = s->ext_value[pi] };
+    avr_ioctl(s->avr, AVR_IOCTL_IOPORT_SET_EXTERNAL(port), &e);
+}
+
 static void do_gpio_set(sim_t *s, char port, int pin, int value) {
-    avr_irq_t *irq = avr_io_getirq(s->avr, AVR_IOCTL_IOPORT_GETIRQ(port), pin);
-    avr_raise_irq(irq, value ? 1 : 0);
+    int pi = port - 'B'; uint8_t bit = (uint8_t)(1 << pin);
+    s->ext_mask[pi] |= bit;
+    s->ext_value[pi] = (uint8_t)((s->ext_value[pi] & ~bit) | (value ? bit : 0));
+    apply_external(s, port);
+    avr_raise_irq(avr_io_getirq(s->avr, AVR_IOCTL_IOPORT_GETIRQ(port), pin), value ? 1 : 0);
     event(s, "gpio_set", "%c%d=%d", port, pin, value ? 1 : 0);
+}
+
+/* Stop driving a pin: it floats back to whatever the AVR does with it (internal pull-up if
+ * enabled, else the last level). */
+static void do_gpio_release(sim_t *s, char port, int pin) {
+    int pi = port - 'B'; uint8_t bit = (uint8_t)(1 << pin);
+    s->ext_mask[pi] &= (uint8_t)~bit;
+    apply_external(s, port);
+    /* PORTB=0x25, PORTC=0x28, PORTD=0x2B (I/O space) -> data[] index +0x20; DDR = PORT-1 */
+    static const int port_addr[3] = { 0x25 + 0x20, 0x28 + 0x20, 0x2B + 0x20 };
+    uint8_t ddr = s->avr->data[port_addr[pi] - 1], prt = s->avr->data[port_addr[pi]];
+    if (!(ddr & bit) && (prt & bit))
+        avr_raise_irq(avr_io_getirq(s->avr, AVR_IOCTL_IOPORT_GETIRQ(port), pin), 1);
+    event(s, "gpio_release", "%c%d", port, pin);
 }
 
 static void run_step(sim_t *s, step_t *st) {
@@ -195,6 +222,7 @@ static void run_step(sim_t *s, step_t *st) {
         int id = i2c_master_queue(&s->i2c, st->addr, 1, NULL, st->n);
         event(s, "i2c_queued", "id=%d read addr=0x%02x n=%d", id, st->addr, st->n); break; }
     case STEP_GPIO_SET: do_gpio_set(s, st->port, st->pin, st->value); break;
+    case STEP_GPIO_RELEASE: do_gpio_release(s, st->port, st->pin); break;
     case STEP_MARKER: event(s, "marker", "%s", st->text); break;
     }
 }
@@ -231,11 +259,12 @@ static const char *parse_action(char *line, step_t *st) {
         }
         return NULL;
     }
-    if (!strcmp(tok, "gpio_set")) {
-        st->kind = STEP_GPIO_SET;
+    if (!strcmp(tok, "gpio_set") || !strcmp(tok, "gpio_release")) {
+        st->kind = tok[5] == 's' ? STEP_GPIO_SET : STEP_GPIO_RELEASE;
         tok = strtok_r(NULL, " \t\r\n", &save); if (!tok || strlen(tok) != 2) return "pin must be like B3";
         st->port = (char)toupper((unsigned char)tok[0]); st->pin = tok[1] - '0';
         if (st->port < 'B' || st->port > 'D' || st->pin < 0 || st->pin > 7) return "pin out of range";
+        if (st->kind == STEP_GPIO_RELEASE) return NULL;
         tok = strtok_r(NULL, " \t\r\n", &save); if (!tok) return "missing value";
         long v = parse_num(tok, &ok); if (!ok || (v != 0 && v != 1)) return "value must be 0 or 1";
         st->value = (int)v; return NULL;

@@ -50,12 +50,15 @@ void panel_state_json(const panel_state_t *s, FILE *f) {
 
 void panel_state_filmstrip(const panel_state_t *s, unsigned long seq, unsigned long long cycle,
                            unsigned long long prev_cycle, FILE *f) {
-    fprintf(f, "#%05lu  cycle %llu  t=%.3f ms  (+%.3f ms)  intensity %u/%u%s%s%s%s\n",
+    fprintf(f, "#%05lu  cycle %llu  t=%.3f ms  (+%.3f ms)  intensity %u/%u%s%s%s%s",
             seq, cycle, cycle / 16000.0, (cycle - prev_cycle) / 16000.0,
             s->intensity[0], s->intensity[1],
             s->shutdown[0] ? "  dev0:SHUTDOWN" : "", s->shutdown[1] ? "  dev1:SHUTDOWN" : "",
             (s->display_test[0] || s->display_test[1]) ? "  DISPLAY_TEST" : "",
             s->orphan_bits ? "  ORPHAN_BITS" : "");
+    if (s->scan_limit[0] != 7 || s->scan_limit[1] != 7) fprintf(f, "  scan_limit %u/%u", s->scan_limit[0], s->scan_limit[1]);
+    if (s->decode[0] || s->decode[1]) fprintf(f, "  decode 0x%02x/0x%02x", s->decode[0], s->decode[1]);
+    fputc('\n', f);
     for (int r = 0; r < PANEL_ROWS; r++) {
         char line[PANEL_ROWS + 1];
         for (int i = 0; i < 8; i++) line[i] = (s->rows[r] & (0x80 >> i)) ? '#' : '.';
