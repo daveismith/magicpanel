@@ -29,6 +29,8 @@ on:
       - ".github/workflows/firmware-regression.yml"
   workflow_dispatch:
 
+# Actions are pinned to full commit SHAs (immutable); the trailing comment records the release
+# tag each SHA was resolved from. Bump deliberately, updating both together.
 permissions:
   contents: read
   pull-requests: write
@@ -38,14 +40,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
 
       - name: Host packages (libelf for simavr)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libelf-dev pkg-config build-essential
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
@@ -59,7 +61,7 @@ jobs:
 
       # --- caches: arduino-cli binary + AVR core/toolchain, built libsimavr, python venv -----
       - name: Cache arduino toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             tools/bin
@@ -67,13 +69,13 @@ jobs:
           key: arduino-${{ runner.os }}-cli${{ steps.pins.outputs.cli }}-core${{ steps.pins.outputs.core }}-v1
 
       - name: Cache libsimavr
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: third_party/simavr/simavr/obj-*
           key: simavr-${{ runner.os }}-${{ steps.pins.outputs.simavr }}-v1
 
       - name: Cache python venv
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .venv
           key: venv-${{ runner.os }}-py3.12-${{ hashFiles('requirements.txt') }}
@@ -90,16 +92,16 @@ jobs:
         run: make harness
 
       - name: Run all scenarios and compare to baselines
-        run: cd tests && ../.venv/bin/python -m unittest -v test_regression
+        run: .venv/bin/python -m pytest tests/test_regression.py -v
 
       - name: Determinism check (full suite twice, byte-identical)
-        run: cd tests && ../.venv/bin/python -m unittest -v test_determinism
+        run: .venv/bin/python -m pytest tests/test_determinism.py -v
 
       - name: Mutation self-test (every mutant must be detected)
-        run: cd tests && ../.venv/bin/python -m unittest -v test_mutants
+        run: .venv/bin/python -m pytest tests/test_mutants.py -v
 
       - name: MCP server acceptance
-        run: cd tests && ../.venv/bin/python -m unittest -v test_mcp
+        run: .venv/bin/python -m pytest tests/test_mcp.py -v
 
       # --- failure diagnostics -----------------------------------------------------------------
       - name: Collect diff reports
@@ -118,7 +120,7 @@ jobs:
 
       - name: Upload run artefacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: runs-${{ github.run_id }}
           path: |
@@ -135,7 +137,7 @@ jobs:
 
       - name: Post diff report as PR comment
         if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('fs');
