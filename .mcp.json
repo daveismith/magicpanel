@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "magicpanel": {
+      "command": "sh",
+      "args": ["mcp/serve.sh"]
+    }
+  }
+}
