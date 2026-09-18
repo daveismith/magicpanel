@@ -22,11 +22,21 @@ def scenario_names() -> list[str]:
 
 @pytest.fixture(scope="session")
 def firmware() -> Path:
-    """build/firmware.elf, built with the pinned toolchain if missing."""
+    """build/firmware.elf: the DEV sketch (MagicPanel.ino), built with the pinned toolchain if missing."""
     if not mplib.DEFAULT_ELF.exists():
-        r = subprocess.run([sys.executable, str(REPO / "tools" / "build_firmware.py")], capture_output=True, text=True, cwd=REPO)
+        r = subprocess.run([sys.executable, str(REPO / "tools" / "build_firmware.py"), "--sketch", str(mplib.DEV_SKETCH),
+                            "--out", str(mplib.BUILD_DIR)], capture_output=True, text=True, cwd=REPO)
         assert r.returncode == 0, "firmware build failed:\n" + r.stdout + r.stderr
     return mplib.DEFAULT_ELF
+
+
+@pytest.fixture(scope="session")
+def reference() -> tuple[Path, Path]:
+    """build/reference/firmware.elf: the frozen specimen sketch, built if missing. Returns (elf, metadata)."""
+    elf, meta = mplib.REFERENCE_DIR / "firmware.elf", mplib.REFERENCE_DIR / "metadata.json"
+    if not elf.exists():
+        build_sketch(mplib.SPECIMEN_SKETCH, mplib.REFERENCE_DIR)
+    return elf, meta
 
 
 @pytest.fixture(scope="session")

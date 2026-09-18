@@ -2,9 +2,11 @@
 """Reproducible firmware build with the pinned arduino-cli / AVR core / LedControl.
 
   python3 tools/build_firmware.py [--sketch PATH] [--out DIR] [--check-determinism]
-                                  [--compare-elf REF.elf]
+                                  [--compare-elf REF.elf] [--expect-flash SHA256]
 
-Writes <out>/firmware.elf and <out>/metadata.json. Never touches the sketch source: the .ino
+Default sketch is MagicPanel.ino (the one under development); `make reference` builds the frozen
+specimen MagicPanel_v010_5.ino into build/reference/ instead. Writes <out>/firmware.elf and
+<out>/metadata.json. Never touches the sketch source: the .ino
 is copied into a staging folder named after it (arduino-cli requires dir == sketch name).
 Non-determinism guards: __DATE__/__TIME__/__TIMESTAMP__ are scanned for in every compiled
 source tree and additionally made a hard compiler error (-Werror=date-time); absolute paths
@@ -139,7 +141,8 @@ def toolchain_metadata() -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--sketch", default=str(REPO / "MagicPanel_v010_5.ino"))
+    ap.add_argument("--sketch", default=str(REPO / "MagicPanel.ino"))
+    ap.add_argument("--expect-flash", help="fail unless the flash image sha256 equals this")
     ap.add_argument("--out", default=str(REPO / "build"))
     ap.add_argument("--check-determinism", action="store_true", help="clean-build twice and require identical ELF hashes")
     ap.add_argument("--compare-elf", help="reference ELF; report whether the flash image matches")
@@ -193,6 +196,9 @@ def main() -> int:
                                "flash_matches": rc == c1}
         print(f"flash image {'MATCHES' if rc == c1 else 'DIFFERS FROM'} reference {ref.name} ({rsize} vs {size1} bytes)")
 
+    if a.expect_flash and c1 != a.expect_flash:
+        print(f"FLASH IMAGE MISMATCH: got {c1}, expected {a.expect_flash}")
+        return 3
     final = out / "firmware.elf"
     shutil.copy2(elf1, final)
     meta = {

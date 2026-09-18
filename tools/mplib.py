@@ -16,8 +16,19 @@ SCENARIO_DIR = REPO / "scenarios"
 BASELINE_DIR = REPO / "tests" / "baselines"
 RUNS_DIR = REPO / "runs"
 BUILD_DIR = REPO / "build"
-DEFAULT_ELF = BUILD_DIR / "firmware.elf"
+DEV_SKETCH = REPO / "MagicPanel.ino"                     # the sketch being developed
+SPECIMEN_SKETCH = REPO / "MagicPanel_v010_5.ino"         # frozen reference; never edited
+SPECIMEN_SKETCH_SHA256 = "f213fd7a68dd00307d1231cb648f2f7b223c4232dbc9780440ecc2253de6b638"
+SPECIMEN_ELF = REPO / "MagicPanel_v010_5.ino.elf"
+SPECIMEN_ELF_SHA256 = "36099b3475506f998d7c7374fa53c522d365db38452210c0f321c91da0414966"
+SPECIMEN_FLASH_SHA256 = "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a"
+DEFAULT_ELF = BUILD_DIR / "firmware.elf"                 # built from DEV_SKETCH by `make firmware`
 DEFAULT_METADATA = BUILD_DIR / "metadata.json"
+REFERENCE_DIR = BUILD_DIR / "reference"                  # built from SPECIMEN_SKETCH by `make reference`
+# Comparison mode. "settled": only states that stay visible for >= settle_ms count (the ~0.5 ms
+# intermediate latches while a PrintGrid() is clocked out are ignored). "latch": every latch counts.
+DEFAULT_COMPARE_MODE = os.environ.get("MP_COMPARE_MODE", "settled")
+DEFAULT_SETTLE_MS = float(os.environ.get("MP_SETTLE_MS", "10"))
 F_CPU = 16_000_000
 CYCLES_PER_MS = F_CPU // 1000
 
@@ -73,6 +84,8 @@ class Scenario:
     firmware_reset: bool = True
     timing_tolerance_cycles: int = 0
     timing_tolerance_reason: str = ""
+    compare_mode: str = ""          # "" = project default (DEFAULT_COMPARE_MODE)
+    settle_ms: float | None = None  # None = project default
     vcd: bool = True
     path: Path | None = None
 
@@ -90,10 +103,14 @@ def load_scenario(path: Path) -> Scenario:
     tol = int(d.get("timing_tolerance_cycles", 0))
     if tol and not d.get("timing_tolerance_reason"):
         raise ValueError(f"{path}: timing_tolerance_cycles requires timing_tolerance_reason")
+    mode = str(d.get("compare_mode", "") or "")
+    if mode not in ("", "settled", "latch"):
+        raise ValueError(f"{path}: compare_mode must be 'settled' or 'latch'")
     return Scenario(name=d["name"], description=d.get("description", ""), run_ms=int(d["run_ms"]),
                     steps=list(d.get("steps") or []), eeprom=str(d.get("eeprom", "default")),
                     firmware_reset=bool(d.get("firmware_reset", True)), timing_tolerance_cycles=tol,
                     timing_tolerance_reason=str(d.get("timing_tolerance_reason", "")),
+                    compare_mode=mode, settle_ms=(float(d["settle_ms"]) if "settle_ms" in d else None),
                     vcd=bool(d.get("vcd", True)), path=path)
 
 
@@ -188,6 +205,19 @@ def canonical_hash(records: list[dict]) -> str:
     return h.hexdigest()
 
 
+def settled_indices(records: list[dict], settle_ms: float = DEFAULT_SETTLE_MS) -> list[int]:
+    """Indices of the states that stayed visible for at least settle_ms (the last state always
+    counts). Consecutive latches of one PrintGrid() are ~0.47 ms apart, so with the default
+    10 ms only the state after the final latch of a frame survives; the firmware's shortest
+    animation step is 30 ms, so no real step is dropped."""
+    thr = int(settle_ms * CYCLES_PER_MS)
+    return [i for i in range(len(records)) if i == len(records) - 1 or records[i + 1]["cycle"] - records[i]["cycle"] >= thr]
+
+
+def settled_display(records: list[dict], settle_ms: float = DEFAULT_SETTLE_MS) -> list[dict]:
+    return [records[i] for i in settled_indices(records, settle_ms)]
+
+
 def timing_hash(records: list[dict]) -> str:
     h = hashlib.sha256()
     for r in records:
@@ -216,6 +246,11 @@ def augment_summary(run_dir: Path, scenario: Scenario | None, elf: Path, metadat
     events = read_jsonl(run_dir / "events.jsonl")
     summary["canonical_hash"] = canonical_hash(disp)
     summary["timing_hash"] = timing_hash(disp)
+    settle = scenario.settle_ms if (scenario and scenario.settle_ms is not None) else DEFAULT_SETTLE_MS
+    settled = settled_display(disp, settle)
+    summary["settled_hash"] = canonical_hash(settled)
+    summary["settled_timing_hash"] = timing_hash(settled)
+    summary["settled_states"] = len(settled)
     summary["markers"] = [{"cycle": e["cycle"], "ns": e["ns"], "text": e["detail"]} for e in events if e["kind"] == "marker"]
     summary["diagnostics"] = [e for e in events if e["kind"] in ("malformed_burst", "undefined_register", "cpu_stopped", "warning")]
     summary["firmware"] = {"elf": str(elf), "elf_sha256": sha256_file(elf)}
@@ -225,6 +260,8 @@ def augment_summary(run_dir: Path, scenario: Scenario | None, elf: Path, metadat
         summary["scenario"] = {"name": scenario.name, "description": scenario.description, "run_ms": scenario.run_ms,
                                "timing_tolerance_cycles": scenario.timing_tolerance_cycles,
                                "timing_tolerance_reason": scenario.timing_tolerance_reason,
+                               "compare_mode": scenario.compare_mode or DEFAULT_COMPARE_MODE,
+                               "settle_ms": settle,
                                "sha256": sha256_file(scenario.path) if scenario.path else None}
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     return summary

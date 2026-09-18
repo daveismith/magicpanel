@@ -6,7 +6,7 @@ SCENARIO ?=
 RUN_ARGS ?=
 PYTEST_ARGS ?= -v
 
-.PHONY: setup venv firmware harness scenarios baseline rebaseline compare test test-fast determinism mutants spikes gif gifs clean help
+.PHONY: setup venv firmware reference check-specimen harness scenarios baseline rebaseline compare test test-fast determinism mutants spikes gif gifs clean help
 
 help:             ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -18,8 +18,15 @@ venv:             ## python venv with pinned deps (requirements.txt)
 	@test -x $(PY) || python3 -m venv .venv
 	@$(PY) -m pip install -q -r requirements.txt
 
-firmware:         ## reproducible build of the sketch -> build/firmware.elf + build/metadata.json
-	$(PY) tools/build_firmware.py --check-determinism --compare-elf MagicPanel_v010_5.ino.elf
+firmware:         ## build the DEV sketch MagicPanel.ino -> build/firmware.elf + build/metadata.json
+	$(PY) tools/build_firmware.py --sketch MagicPanel.ino --out build --check-determinism
+
+reference: check-specimen ## build the frozen specimen -> build/reference/ and require its flash image to match the shipped ELF
+	$(PY) tools/build_firmware.py --sketch MagicPanel_v010_5.ino --out build/reference --compare-elf MagicPanel_v010_5.ino.elf \
+	    --expect-flash 3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a
+
+check-specimen:   ## fail if the frozen specimen sketch/ELF hashes changed
+	$(PY) tools/check_specimen.py
 
 harness:          ## build harness/mpsim against the vendored simavr
 	$(MAKE) -C harness
@@ -38,12 +45,12 @@ compare:          ## compare runs/<name> against tests/baselines/<name> (all, or
 baseline: harness ## capture baselines for scenarios that do not have one yet (never overwrites)
 	$(PY) tools/baseline.py capture --all
 
-rebaseline: harness ## replace ONE baseline deliberately: make rebaseline SCENARIO=<name> I_MEAN_IT=1
+rebaseline: harness ## replace ONE baseline from the DEV sketch build, deliberately: make rebaseline SCENARIO=<name> I_MEAN_IT=1
 	@test -n "$(SCENARIO)" || { echo "usage: make rebaseline SCENARIO=<name> I_MEAN_IT=1"; exit 2; }
 	@test "$(I_MEAN_IT)" = "1" || { echo "refusing: re-baselining rewrites the golden truth. Re-run with I_MEAN_IT=1 and review tests/baselines/$(SCENARIO)/rebaseline_diff.md"; exit 2; }
 	$(PY) tools/baseline.py capture $(SCENARIO) --i-mean-it
 
-test: firmware harness ## full pytest suite: regression, determinism, mutation self-test, MCP
+test: check-specimen firmware harness ## full pytest suite: regression, determinism, mutation self-test, MCP
 	$(PY) -m pytest tests $(PYTEST_ARGS)
 
 test-fast: harness ## regression only (assumes build/firmware.elf exists); MP_SCENARIOS=a,b or -k to narrow

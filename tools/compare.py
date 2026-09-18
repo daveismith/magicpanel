@@ -2,10 +2,13 @@
 """Compare a run against its baseline and write a readable diff report.
 
   python3 tools/compare.py SCENARIO [--run-id ID] [--baseline-dir DIR] [--report PATH] [--tolerance N]
+                                    [--mode settled|latch] [--settle-ms MS]
 
 Order of checks: (1) exact match of the canonical display sequence ignoring timing,
 (2) timing match within the scenario's tolerance (default exact), (3) canonical hash.
-Exit 0 = pass, 1 = mismatch, 2 = missing inputs.
+Mode "settled" (project default, see mplib.DEFAULT_COMPARE_MODE) compares only the states that
+stayed visible >= settle_ms, i.e. what the panel shows after a frame has been clocked out;
+"latch" compares every MAX7221 latch. Exit 0 = pass, 1 = mismatch, 2 = missing inputs.
 """
 from __future__ import annotations
 import argparse, json, sys
@@ -38,29 +41,42 @@ def _side_by_side(left: dict | None, right: dict | None, lt: str, rt: str) -> li
 def _fmt_t(rec: dict | None) -> str:
     if not rec:
         return "absent"
-    return f"cycle {rec['cycle']} ({rec['cycle'] / mplib.CYCLES_PER_MS:.3f} ms)"
+    return f"cycle {rec['cycle']} ({rec['cycle'] / mplib.CYCLES_PER_MS:.3f} ms, raw seq {rec.get('seq', '?')})"
 
 
-def compare(scenario: str, run_dir: Path, baseline_dir: Path, tolerance: int | None = None) -> tuple[bool, str, dict]:
-    b_disp = mplib.read_jsonl(baseline_dir / "display.jsonl")
-    a_disp = mplib.read_jsonl(run_dir / "display.jsonl")
+def compare(scenario: str, run_dir: Path, baseline_dir: Path, tolerance: int | None = None,
+            mode: str | None = None, settle_ms: float | None = None) -> tuple[bool, str, dict]:
+    b_raw = mplib.read_jsonl(baseline_dir / "display.jsonl")
+    a_raw = mplib.read_jsonl(run_dir / "display.jsonl")
     b_sum = json.loads((baseline_dir / "summary.json").read_text())
     a_sum = json.loads((run_dir / "summary.json").read_text())
     b_meta = json.loads((baseline_dir / "meta.json").read_text()) if (baseline_dir / "meta.json").exists() else {}
+    sc_cfg = a_sum.get("scenario", {})
     if tolerance is None:
-        tolerance = int(a_sum.get("scenario", {}).get("timing_tolerance_cycles", 0))
+        tolerance = int(sc_cfg.get("timing_tolerance_cycles", 0))
+    mode = mode or sc_cfg.get("compare_mode") or mplib.DEFAULT_COMPARE_MODE
+    settle_ms = settle_ms if settle_ms is not None else float(sc_cfg.get("settle_ms", mplib.DEFAULT_SETTLE_MS))
+    if mode == "settled":
+        b_disp, a_disp = mplib.settled_display(b_raw, settle_ms), mplib.settled_display(a_raw, settle_ms)
+    else:
+        b_disp, a_disp = b_raw, a_raw
     markers = a_sum.get("markers") or b_sum.get("markers") or []
 
     b_canon, a_canon = mplib.canonical_display(b_disp), mplib.canonical_display(a_disp)
-    result = {"scenario": scenario, "baseline_states": len(b_disp), "actual_states": len(a_disp),
+    result = {"scenario": scenario, "mode": mode, "settle_ms": settle_ms if mode == "settled" else None,
+              "baseline_raw_states": len(b_raw), "actual_raw_states": len(a_raw),
+              "baseline_states": len(b_disp), "actual_states": len(a_disp),
               "baseline_hash": mplib.canonical_hash(b_disp), "actual_hash": mplib.canonical_hash(a_disp),
               "tolerance_cycles": tolerance, "sequence_match": None, "timing_match": None, "hash_match": None,
               "first_divergence": None, "timing": {}}
     out = [f"# Diff report: {scenario}", ""]
     fw_b = b_meta.get("firmware", {}).get("flash_sha256") or b_meta.get("firmware", {}).get("elf_sha256", "?")
     fw_a = (a_sum.get("build", {}).get("elf", {}).get("flash_sha256") or a_sum.get("firmware", {}).get("elf_sha256", "?"))
-    out += [f"- Baseline firmware flash/elf sha256: `{fw_b}`", f"- Actual firmware flash/elf sha256: `{fw_a}`",
-            f"- Baseline states: {len(b_disp)}, actual states: {len(a_disp)}", f"- Timing tolerance: {tolerance} cycles", ""]
+    mode_line = (f"- Mode: **settled** (states visible ≥ {settle_ms:g} ms; intermediate latches while a frame is clocked out are ignored)"
+                 if mode == "settled" else "- Mode: **latch** (every MAX7221 latch counts)")
+    out += [f"- Baseline firmware flash/elf sha256: `{fw_b}`", f"- Actual firmware flash/elf sha256: `{fw_a}`", mode_line,
+            f"- Baseline states: {len(b_disp)} (raw {len(b_raw)}), actual states: {len(a_disp)} (raw {len(a_raw)})",
+            f"- Timing tolerance: {tolerance} cycles", ""]
 
     # (1) sequence
     n = min(len(b_canon), len(a_canon))
@@ -139,6 +155,7 @@ def main() -> int:
     ap.add_argument("--run-id", default=None); ap.add_argument("--runs-dir", default=str(mplib.RUNS_DIR))
     ap.add_argument("--baseline-dir", default=None); ap.add_argument("--report", default=None)
     ap.add_argument("--tolerance", type=int, default=None); ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--mode", choices=["settled", "latch"], default=None); ap.add_argument("--settle-ms", type=float, default=None)
     a = ap.parse_args()
     run_dir = Path(a.runs_dir) / (a.run_id or a.scenario)
     baseline_dir = Path(a.baseline_dir) if a.baseline_dir else mplib.BASELINE_DIR / a.scenario
@@ -146,13 +163,13 @@ def main() -> int:
         print(f"no run at {run_dir}", file=sys.stderr); return 2
     if not (baseline_dir / "display.jsonl").exists():
         print(f"no baseline at {baseline_dir} (run `make baseline`)", file=sys.stderr); return 2
-    ok, report, result = compare(a.scenario, run_dir, baseline_dir, a.tolerance)
+    ok, report, result = compare(a.scenario, run_dir, baseline_dir, a.tolerance, a.mode, a.settle_ms)
     rp = Path(a.report) if a.report else run_dir / "diff_report.md"
     rp.write_text(report)
     (run_dir / "compare.json").write_text(json.dumps(result, indent=2) + "\n")
     if not a.quiet:
         if ok:
-            print(f"PASS {a.scenario}: {result['actual_states']} states, hash {result['actual_hash'][:12]}, max drift {result['timing']['max_abs_drift_cycles']} cycles")
+            print(f"PASS {a.scenario} [{result['mode']}]: {result['actual_states']} states, hash {result['actual_hash'][:12]}, max drift {result['timing']['max_abs_drift_cycles']} cycles")
         else:
             print(report)
     print(f"report: {rp}")

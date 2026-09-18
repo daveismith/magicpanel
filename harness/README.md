@@ -12,8 +12,9 @@ can be proven to display the same patterns at the same times as the build we hav
 ## Layout
 
 ```
-MagicPanel_v010_5.ino       the specimen under test (never modified by the harness)
-MagicPanel_v010_5.ino.elf   the precompiled reference ELF (flash image == our rebuild)
+MagicPanel.ino              the sketch under development (edit this one)
+MagicPanel_v010_5.ino       the frozen reference specimen (hash-guarded, never modified)
+MagicPanel_v010_5.ino.elf   the precompiled reference ELF (flash image == `make reference`)
 tools/                      setup.sh, versions.env, build_firmware.py, run_scenario.py,
                             compare.py, compare_all.py, baseline.py, gen_scenarios.py, mplib.py
 harness/                    mpsim (C, links libsimavr): parts/max7221, panel, i2c_master, vcd
@@ -44,7 +45,8 @@ Nothing else needs it; CI caches those and runs the tests offline.
 ```sh
 git clone --recursive <repo> && cd magicpanel
 make setup        # ~2 min the first time
-make firmware     # build/firmware.elf (+ determinism check + comparison with the specimen ELF)
+make firmware     # MagicPanel.ino -> build/firmware.elf (+ determinism check)
+make reference    # specimen -> build/reference/ (must reproduce the shipped ELF's flash image)
 make harness      # harness/mpsim
 make test         # everything: regression, determinism, mutation self-test, MCP (pytest)
 ```
@@ -106,7 +108,11 @@ are derived artefacts and are not committed. The MCP tool `render_gif` does the 
 
 ## Reading a diff report
 
-`diff_report.md` is written next to every compared run. It states, in order:
+`diff_report.md` is written next to every compared run. Comparison runs in **settled** mode by
+default (`MP_COMPARE_MODE`, default settle threshold 10 ms via `MP_SETTLE_MS`, per-scenario
+`compare_mode`/`settle_ms`): only states that stayed visible for at least the threshold are
+compared, so the intermediate latches while a `PrintGrid()` is clocked out do not count. `latch`
+mode compares every latch. The report states, in order:
 
 1. **PASS/FAIL** and the firmware hashes of both sides.
 2. **Display sequence**: the first state index where the *content* differs (ignoring timing),
@@ -153,8 +159,9 @@ come from `tools/gen_scenarios.py`; edit that and regenerate rather than hand-ed
 
 ## How and when to re-baseline
 
-A baseline changes only when the firmware's *intended* behaviour changes. Never re-baseline to
-make a red build green. Procedure:
+A baseline changes only when the firmware's *intended* behaviour changes. Baselines were captured
+from the frozen specimen; re-baselining captures from the dev sketch's `build/firmware.elf`.
+Never re-baseline to make a red build green. Procedure:
 
 1. Look at `runs/<scenario>/diff_report.md` and decide whether the change is intended.
 2. `make rebaseline SCENARIO=<name> I_MEAN_IT=1` — refuses without `I_MEAN_IT=1`. It re-runs the

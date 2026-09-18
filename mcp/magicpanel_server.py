@@ -61,9 +61,10 @@ def _truncate(text: str, limit: int = 12000) -> str:
 # ------------------------------------------------------------------ build / inspect
 @server.tool()
 def build_firmware(sketch_path: str | None = None) -> dict[str, Any]:
-    """Compile a sketch with the pinned toolchain (default: MagicPanel_v010_5.ino at the repo
-    root). Returns the ELF path and build metadata (hashes, toolchain versions). A non-default
-    sketch is built into build/<sketch-stem>/ so it does not replace build/firmware.elf."""
+    """Compile a sketch with the pinned toolchain (default: MagicPanel.ino, the sketch under
+    development, into build/firmware.elf). Returns the ELF path and build metadata (hashes,
+    toolchain versions). A non-default sketch is built into build/<sketch-stem>/ so it does not
+    replace build/firmware.elf; the frozen specimen MagicPanel_v010_5.ino must never be edited."""
     args = [_py(), str(REPO / "tools" / "build_firmware.py")]
     out_dir = mplib.BUILD_DIR
     if sketch_path:

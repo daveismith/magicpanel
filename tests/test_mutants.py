@@ -19,12 +19,13 @@ def _run_and_compare(name: str, elf: Path, meta: Path, runs_dir: Path):
     return ok, report, result, out
 
 
-def test_clean_rebuild_passes(firmware, harness):
+def test_clean_rebuild_of_specimen_passes(harness):
+    """A from-scratch build of the frozen specimen must reproduce the shipped flash image and pass."""
     out = mplib.BUILD_DIR / "selftest-clean"
     shutil.rmtree(out, ignore_errors=True)
-    elf, meta = build_sketch(REPO / "MagicPanel_v010_5.ino", out)
-    assert json.loads(meta.read_text())["elf"]["flash_sha256"] == json.loads(mplib.DEFAULT_METADATA.read_text())["elf"]["flash_sha256"], \
-        "clean rebuild differs from build/firmware.elf"
+    elf, meta = build_sketch(mplib.SPECIMEN_SKETCH, out)
+    assert json.loads(meta.read_text())["elf"]["flash_sha256"] == mplib.SPECIMEN_FLASH_SHA256, \
+        "clean rebuild of the specimen no longer matches the shipped ELF's flash image"
     for name in ("power_on_default", "cmd_20_cross", "cmd_05_toggle"):
         ok, report, _, _ = _run_and_compare(name, elf, meta, mplib.RUNS_DIR / "selftest-clean")
         assert ok, f"unmodified rebuild fails {name}:\n{report[:2000]}"

@@ -103,3 +103,24 @@ avr-libc's default seed applies; every `receiveEvent` consumes one `random()`, s
 random-dependent patterns (FadeOutIn, RandomPixel, Random modes) are deterministic but
 order-sensitive. Baselines for them are valid only for the exact stimulus order in the
 scenario, which is the intent.
+
+## Development phase
+
+**D-17 — Two sketches.** `MagicPanel_v010_5.ino` is the frozen reference (SHA-256 pinned in
+`tools/mplib.py`, guarded by `make check-specimen`, `tests/test_specimen.py` and CI);
+`MagicPanel.ino` started as a byte-identical copy and is the only firmware file that changes.
+`make firmware` builds the dev sketch; `make reference` rebuilds the specimen and requires its
+flash image to equal the shipped ELF's. Baselines were captured from the specimen; re-baselining
+captures from the dev build and is always explicit.
+
+**D-18 — Settled comparison mode is the default (2026-09-18, owner request).** Only states that
+stay visible ≥ 10 ms are compared, which removes the ~0.47 ms intermediate latches of a
+`PrintGrid()` while keeping every real animation step (the firmware's shortest is 30 ms) and
+the settled frame's own timestamp. Rationale: during development the interim clocking states
+are noise unless the bit-bang path itself is being changed, in which case `compare_mode:
+latch` (per scenario) or `MP_COMPARE_MODE=latch` restores the strict behaviour. The raw
+`display.jsonl` is unchanged, so both views come from the same artefact. The threshold is
+10 ms rather than the GIF's 20 ms merge so that a future 15–20 ms animation step would still
+count; lower `MP_SETTLE_MS` if steps shorter than that are introduced. Timing tolerance on
+settled states stays 0 by default, so a change in bit-bang speed still shows as a timing
+failure (settled timestamps move by the transfer-time delta).

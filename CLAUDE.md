@@ -1,0 +1,104 @@
+# CLAUDE.md — Magic Panel firmware development with the simulation harness
+
+Read this before touching anything. It tells you what the repo is for, what must never change,
+how to check your work, and where the details live.
+
+## What this repo is
+
+Firmware for the IA-PARTS **Magic Panel** (ATmega328P @ 16 MHz, two daisy-chained MAX7221 LED
+drivers driving an 8×8 LED grid, I2C slave at `0x14`), plus a **deterministic simavr-based
+regression harness** that records exactly what the panel displays and when, in AVR cycles.
+Baselines captured from the original firmware are the golden truth; every build of the sketch
+under development is compared against them.
+
+## The two sketches — this is the most important rule
+
+| File | Role | May you edit it? |
+|---|---|---|
+| `MagicPanel_v010_5.ino` | **Frozen reference specimen.** SHA-256 must stay `f213fd7a68dd00307d1231cb648f2f7b223c4232dbc9780440ecc2253de6b638`. `MagicPanel_v010_5.ino.elf` is its shipped build. | **Never.** `make check-specimen` and `tests/test_specimen.py` fail if it changes. |
+| `MagicPanel.ino` | **The sketch under development.** Started as a byte-identical copy of the specimen. `make firmware` builds it; all tests run it against the baselines. | Yes. This is the only firmware file you change. |
+
+If you need to know what the *original* does, read the specimen or `docs/firmware-map.md`;
+if you need to change behaviour, edit `MagicPanel.ino`.
+
+## Toolchain (all pinned, all repo-local; see `tools/versions.env`)
+
+arduino-cli 1.5.1, `arduino:avr` core 1.8.6 (avr-gcc 7.3.0), FQBN `arduino:avr:diecimila:cpu=atmega328`,
+LedControl 1.0.6 (submodule `third_party/LedControl`), simavr `fe665cef` (submodule
+`third_party/simavr`), Python 3.11+ venv with `requirements.txt` (PyYAML, mcp, Pillow, pytest).
+Do not install anything else or change a pin without recording why in `docs/decisions.md`.
+
+```sh
+make setup          # once per checkout (network needed only here)
+make firmware       # MagicPanel.ino -> build/firmware.elf  (two clean builds must be identical)
+make reference      # specimen -> build/reference/, must reproduce the shipped ELF's flash image
+make harness        # harness/mpsim
+```
+
+## The development loop
+
+1. Edit `MagicPanel.ino`.
+2. `make firmware` (build must be deterministic; `-Werror=date-time` forbids `__DATE__`/`__TIME__`).
+3. Quick check: `make run SCENARIO=<name>` then `make compare SCENARIO=<name>`; read
+   `runs/<name>/diff_report.md` and `runs/<name>/filmstrip.txt`, or `make gif SCENARIO=<name> RUN=1`.
+4. Full check: `make test` (≈3–4 min; pytest). Narrow with `MP_SCENARIOS=a,b make test-fast` or
+   `.venv/bin/python -m pytest tests/test_regression.py -k cross`.
+5. If a scenario fails **and the change is intended**, re-baseline that one scenario only:
+   `make rebaseline SCENARIO=<name> I_MEAN_IT=1`, then review and commit
+   `tests/baselines/<name>/` including `rebaseline_diff.md`. Say in the commit message which
+   pattern changed and why. Never re-baseline to make a red build green without that review.
+6. New behaviour needs a new scenario: add `scenarios/<name>.yaml` (schema in
+   `harness/README.md`), run it, check the filmstrip, `make baseline` (captures only scenarios
+   without a baseline), commit both.
+
+Scenario names encode what they exercise: `cmd_NN_*` = I2C command NN, `mode_N_*` = jumper/rotary
+mode N, plus `power_on_default`, `i2c_garbage`, `i2c_mid_animation`, `i2c_back_to_back`,
+`i2c_read_probe`, `mode_change_mid_run`. `list_scenarios` (MCP) or `ls scenarios/` shows them.
+
+## What "matches the baseline" means
+
+`display.jsonl` records every change of the rendered panel, including the ~0.5 ms intermediate
+states while a `PrintGrid()` clocks 16 bursts into the MAX7221s. Comparison runs in **settled
+mode by default**: only states that stay visible for ≥ 10 ms count (`MP_SETTLE_MS`), i.e. what
+the panel shows after a whole frame has been clocked out. Content must match exactly, and the
+settled states' timestamps must match within the scenario's `timing_tolerance_cycles`
+(default 0; a tolerance needs a `timing_tolerance_reason`). Use `compare_mode: latch` in a
+scenario, `--mode latch` on `tools/compare.py`, or `MP_COMPARE_MODE=latch` when the
+intermediate latch sequence itself matters (e.g. you changed the bit-bang code).
+
+Alert and FlashAll have identical content and differ only in timing, so timing is part of the
+pass criterion. Random-dependent patterns are deterministic in simulation (fixed seed) but
+sensitive to the *order* of `random()` calls; see `docs/decisions.md` D-1/D-16.
+
+## Facts about the firmware you will trip over (details in `docs/firmware-map.md`)
+
+- The I2C handler runs the whole animation **inside the TWI ISR** with interrupts re-enabled; a
+  second command mid-animation nests and the outer animation resumes afterwards.
+- Only the first byte of an I2C write is read. A multi-byte write executes byte 0 and then
+  **deafens the receiver until reset** (`Wire.read()` never drains the buffer). The harness
+  supports multi-byte writes because a future firmware may use them.
+- Command 2 falls through into command 3; `allOFF;` (no parentheses) in `allONTimed` is a
+  no-op, so commands 1–4 leave the panel on; `FadeOutIn` writes 64 bytes past `VMagicPanel`
+  and can make the next `Quadrant`/`RandomPixel` call do nothing. These are baselined as-is;
+  fixing them is a behaviour change that requires a deliberate re-baseline.
+- Command 1 / jumper mode 8 block for 1000 s; their scenarios only observe the ON state.
+- Row 0 is the top; `SetRow` bit 7 is the leftmost column (assumption A-1, provisional).
+
+## Using the MCP server from Claude Code
+
+`.mcp.json` registers `magicpanel` (needs `make venv` first). Batch: `build_firmware`,
+`run_scenario`, `compare_to_baseline`, `run_all`, `render_gif`, `list_scenarios`,
+`describe_firmware`. Interactive: `sim_start` → `sim_step ms=100` → `sim_i2c_write bytes=[20]`
+→ `sim_step ms=200` → `sim_get_display` / `sim_get_log` → `sim_stop`. `update_baseline` is
+gated: it shows the diff first and applies only with `confirm=true`. Keep outputs small; the
+full artefacts are files under `runs/`.
+
+## Conventions
+
+- Python tests are **pytest** (`tests/`, fixtures in `conftest.py`). No unittest.
+- GitHub Actions are pinned to full commit SHAs with a `# vX.Y.Z` comment; bump both together.
+- Record non-obvious choices and open assumptions in `docs/decisions.md` (D-n / A-n).
+- Commit in small reviewable steps; baselines and the scenario that produced them go together.
+- No wall-clock time anywhere in a comparison path; all timing is AVR cycles.
+- Do not modify anything under `third_party/`; they are pinned submodules.
+- `runs/` and `build/` are scratch (gitignored); `tests/baselines/` is truth (committed).

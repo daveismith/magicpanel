@@ -3,6 +3,7 @@ name: firmware-regression
 on:
   push:
     paths:
+      - "MagicPanel.ino"
       - "MagicPanel_v010_5.ino"
       - "harness/**"
       - "scenarios/**"
@@ -16,6 +17,7 @@ on:
       - ".github/workflows/firmware-regression.yml"
   pull_request:
     paths:
+      - "MagicPanel.ino"
       - "MagicPanel_v010_5.ino"
       - "harness/**"
       - "scenarios/**"
@@ -85,7 +87,10 @@ jobs:
         run: make setup
 
       # --- everything below runs without network ----------------------------------------------
-      - name: Build firmware (twice; must be deterministic and match the specimen ELF)
+      - name: Specimen guard + reference build (must reproduce the shipped ELF's flash image)
+        run: make reference
+
+      - name: Build dev firmware MagicPanel.ino (twice; must be deterministic)
         run: make firmware
 
       - name: Build harness
@@ -100,8 +105,8 @@ jobs:
       - name: Mutation self-test (every mutant must be detected)
         run: .venv/bin/python -m pytest tests/test_mutants.py -v
 
-      - name: MCP server acceptance
-        run: .venv/bin/python -m pytest tests/test_mcp.py -v
+      - name: MCP server acceptance and specimen tests
+        run: .venv/bin/python -m pytest tests/test_mcp.py tests/test_specimen.py -v
 
       # --- failure diagnostics -----------------------------------------------------------------
       - name: Collect diff reports
