@@ -1,0 +1,16 @@
+name: reg_start_stop
+description: "Register START of Cross, then Cylon column looping forever (repeat 0) which replaces it; STOP freeze at 3 s keeps the current column lit, STOP blank at 4 s clears it"
+firmware_reset: true
+eeprom: default
+run_ms: 4500
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [160, 20] }
+  - at_ms: 1100
+    i2c_write: { addr: 0x14, bytes: [160, 21, 0] }
+  - at_ms: 3000
+    i2c_write: { addr: 0x14, bytes: [161, 1] }
+  - at_ms: 4000
+    i2c_write: { addr: 0x14, bytes: [161, 0] }

@@ -9,6 +9,9 @@ from mplib import I2C_COMMANDS, JUMPER_MODES, SCENARIO_DIR, SLAVE_ADDR
 
 SEND_MS = 100
 
+# Protocol v1 register access (docs/magicpanel_i2c.h): byte 0 = R | register
+R, START, STOP, BRIGHTNESS, CONFIG = 0x80, 0x20, 0x21, 0x22, 0x30
+
 # Decision D-20: the dev firmware schedules frames from loop() instead of delay(); each settled
 # frame lands within ~0.2 ms of the specimen's (worst measured 3 347 cycles, mode_5_onetest).
 # 8 000 cycles (0.5 ms) leaves headroom yet stays far below the smallest real timing difference
@@ -63,13 +66,14 @@ def main() -> None:
     out["power_on_default"] = y("power_on_default",
         "No stimulus: constructor + setup() init sequence, then idle in mode 0 awaiting I2C", 2000, [])
     out["i2c_garbage"] = y("i2c_garbage",
-        "Invalid and malformed I2C traffic: unknown command, empty write, foreign address, then a "
-        "2-byte write which executes its first byte (Cross) and then deafens the firmware "
-        "(firmware-map 3.3), so the following FlashAll must NOT run; ends with a master read",
-        9000, [i2c(100, 200, label="unknown command 200"), i2c(300, label="empty write (address only)"),
+        "Invalid and malformed I2C traffic: byte 200 (register pointer 0x48 under protocol v1), "
+        "empty write, foreign address, then a 2-byte legacy write, which is rejected (BAD_LENGTH) "
+        "and no longer deafens the receiver (the specimen ran Cross and then ignored everything, "
+        "firmware-map 3.3), so the following FlashAll runs; ends with a master read",
+        9000, [i2c(100, 200, label="byte 200: sets the register pointer"), i2c(300, label="empty write (address only)"),
                i2c(500, 20, addr=0x15, label="Cross to foreign address 0x15"),
-               i2c(700, 20, 5, label="2-byte write [20, 5]: Cross, then receiver deafened"),
-               i2c(4500, 26, label="cmd 26 FlashAll after deafening (expect ignored)"),
+               i2c(700, 20, 5, label="2-byte legacy write [20, 5]: rejected, receiver stays responsive"),
+               i2c(4500, 26, label="cmd 26 FlashAll (runs)"),
                "  - at_ms: 8500\n    i2c_read: { addr: 0x14, n: 2 }"])
     out["i2c_mid_animation"] = y("i2c_mid_animation",
         "Cross (3 s) sent while Toggle (10 s) is running: Cross replaces Toggle at the next frame "
@@ -80,8 +84,8 @@ def main() -> None:
         "replaces the previous one, so the panel ends off (the specimen nested each handler and "
         "corrupted a burst)", 9000, [i2c(100, 33), i2c(100, 20), i2c(100, 0)])
     out["i2c_read_probe"] = y("i2c_read_probe",
-        "Master read from the slave (no onRequest handler: firmware answers a single 0x00), "
-        "then allOFF", 1500, ["  - at_ms: 100\n    i2c_read: { addr: 0x14, n: 2 }", i2c(400, 0)])
+        "Master read from the slave (protocol v1: the identity registers; the specimen answered "
+        "0x00), no display change, then allOFF", 1500, ["  - at_ms: 100\n    i2c_read: { addr: 0x14, n: 2 }", i2c(400, 0)])
     out["mode_change_mid_run"] = y("mode_change_mid_run",
         "Rotary changes at runtime: mode 0 -> mode 2 (FlashAll repeating) at 1 s -> mode 0 at 5 s; "
         "each change is accepted after the 20 ms debounce, blanks the panel (blankPANEL), and the "
@@ -132,6 +136,34 @@ def main() -> None:
         "Mode 6 (Random) from power-on; Cross (cmd 20) at 1 s interrupts its first pattern; after "
         "Cross the Random mode resumes in its off interval, so the panel stays off", 6000,
         [gpio(0, "C0", 0), gpio(0, "C1", 0), i2c(1000, 20)])
+
+    # I2C register interface, protocol v1 (docs/i2c-protocol.md, decision D-22).
+    out["reg_start_stop"] = y("reg_start_stop",
+        "Register START of Cross, then Cylon column looping forever (repeat 0) which replaces it; "
+        "STOP freeze at 3 s keeps the current column lit, STOP blank at 4 s clears it", 4500,
+        [i2c(100, R | START, 20), i2c(1100, R | START, 21, 0), i2c(3000, R | STOP, 1), i2c(4000, R | STOP, 0)])
+    out["reg_repeat_loop"] = y("reg_repeat_loop",
+        "Register START of FlashAll twice back to back (repeat 2), then On 5s (cmd 3) with "
+        "end=blank: the panel blanks when it ends instead of staying lit as cmd 3 does", 13000,
+        [i2c(100, R | START, 26, 2), i2c(7000, R | START, 3, 1, 1)])
+    out["reg_brightness"] = y("reg_brightness",
+        "BRIGHTNESS 4, On 5s started by register, BRIGHTNESS 15 at 1 s, an out-of-range 16 at 1.5 s "
+        "that is rejected and changes nothing", 2000,
+        [i2c(100, R | BRIGHTNESS, 4), i2c(200, R | START, 3), i2c(1000, R | BRIGHTNESS, 15),
+         i2c(1500, R | BRIGHTNESS, 16)])
+    out["reg_random_show"] = y("reg_random_show",
+        "Register START of the random show (catalogue 40, rotary modes 6/9 over I2C): one pattern "
+        "and the start of the off interval", 26000, [i2c(100, R | START, 40)])
+    out["reg_legacy_off"] = y("reg_legacy_off",
+        "CONFIG legacy bit cleared: the one-byte command 20 is ignored (LEGACY_OFF), the register "
+        "START of Cross still works", 4500,
+        [i2c(100, R | CONFIG, 0x06), i2c(300, 20, label="legacy cmd 20 (ignored: legacy off)"),
+         i2c(1000, R | START, 20)])
+    out["reg_gpio_disabled"] = y("reg_gpio_disabled",
+        "Mode 2 (FlashAll) from power-on; CONFIG GPIO_ENABLE cleared and STOP at 1 s; the rotary "
+        "moves to code 3 at 2 s and is ignored; re-enabling GPIO at 3 s starts TwoLoop (code 3)", 6000,
+        [gpio(0, "C1", 0), i2c(1000, R | CONFIG, 0x05), i2c(1100, R | STOP, 0), gpio(2000, "C2", 0),
+         i2c(3000, R | CONFIG, 0x07)])
 
     for name, text in out.items():
         (SCENARIO_DIR / f"{name}.yaml").write_text(text)

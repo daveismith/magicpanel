@@ -1,0 +1,12 @@
+name: reg_repeat_loop
+description: "Register START of FlashAll twice back to back (repeat 2), then On 5s (cmd 3) with end=blank: the panel blanks when it ends instead of staying lit as cmd 3 does"
+firmware_reset: true
+eeprom: default
+run_ms: 13000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [160, 26, 2] }
+  - at_ms: 7000
+    i2c_write: { addr: 0x14, bytes: [160, 3, 1, 1] }

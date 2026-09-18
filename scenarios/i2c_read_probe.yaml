@@ -1,5 +1,5 @@
 name: i2c_read_probe
-description: "Master read from the slave (no onRequest handler: firmware answers a single 0x00), then allOFF"
+description: "Master read from the slave (protocol v1: the identity registers; the specimen answered 0x00), no display change, then allOFF"
 firmware_reset: true
 eeprom: default
 run_ms: 1500

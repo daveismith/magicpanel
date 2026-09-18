@@ -1,16 +1,16 @@
 {
-  "canonical_hash": "694f66d33d0485ebb4807b8e4c0801d3713fad1309b5d9d9afa55fbcbbecfb86",
-  "captured_at": "2026-09-18T17:11:23+00:00",
+  "canonical_hash": "6723cdef0ee156394cf02c5ed36b94d1d982e023b67f54aa1c701a8fa2a0db5d",
+  "captured_at": "2026-09-18T17:11:19+00:00",
   "counts": {
-    "display_changes": 263,
+    "display_changes": 71,
     "empty_latches": 1,
-    "events": 14,
-    "frames": 632,
+    "events": 4,
+    "frames": 87224,
     "gpio_changes": 9,
-    "i2c_transactions": 6,
-    "latches": 316,
+    "i2c_transactions": 1,
+    "latches": 43612,
     "malformed_bursts": 0,
-    "script_steps": 12
+    "script_steps": 2
   },
   "firmware": {
     "elf_sha256": "2cd4e633fd7501216048887c18192f630b64e0b718e2b1d366a09ebe12470425",
@@ -27,9 +27,9 @@
     "version": "0.1.0"
   },
   "random_seed_note": "ADC3 undriven -> randomSeed(0) ignored -> avr-libc default seed (decision D-1)",
-  "scenario": "i2c_garbage",
-  "scenario_sha256": "4358a9e8d3ea046fed990b0d30efac36aff0f920392afc0736fa11f79e8823dd",
-  "timing_hash": "dec8d3fd0140d0cdac2baa35aa44e01a8de1f0c0e56eb47e8ba1cc129c793719",
+  "scenario": "reg_random_show",
+  "scenario_sha256": "c5748612abb64b9ab847b481ddff08331017338fac0ca75a92457ed81c8814f8",
+  "timing_hash": "30d75c1e9da066f05897a3c5c9af02d7cdaa487a93488e9bf2d385cbed5fb612",
   "toolchain": {
     "arduino_cli_commit": "01f3d4f2b",
     "arduino_cli_version": "1.5.1",

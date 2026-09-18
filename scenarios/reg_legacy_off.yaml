@@ -1,0 +1,15 @@
+name: reg_legacy_off
+description: "CONFIG legacy bit cleared: the one-byte command 20 is ignored (LEGACY_OFF), the register START of Cross still works"
+firmware_reset: true
+eeprom: default
+run_ms: 4500
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [176, 6] }
+  - at_ms: 300
+    i2c_write: { addr: 0x14, bytes: [20] }
+    label: "legacy cmd 20 (ignored: legacy off)"
+  - at_ms: 1000
+    i2c_write: { addr: 0x14, bytes: [160, 20] }

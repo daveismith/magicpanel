@@ -52,17 +52,17 @@
       }
     }
   },
-  "canonical_hash": "694f66d33d0485ebb4807b8e4c0801d3713fad1309b5d9d9afa55fbcbbecfb86",
+  "canonical_hash": "8f1bc15abb21c311a3bbb0a7db894ae7f429712133b39be6277a6a7d4bcd36cf",
   "counts": {
-    "display_changes": 263,
+    "display_changes": 27,
     "empty_latches": 1,
-    "events": 14,
-    "frames": 632,
+    "events": 10,
+    "frames": 160,
     "gpio_changes": 9,
-    "i2c_transactions": 6,
-    "latches": 316,
+    "i2c_transactions": 4,
+    "latches": 80,
     "malformed_bursts": 0,
-    "script_steps": 12
+    "script_steps": 8
   },
   "diagnostics": [],
   "eeprom": "default:0xff",
@@ -78,14 +78,14 @@
       false
     ],
     "grid": [
-      "00000000",
-      "00000000",
-      "00000000",
-      "00000000",
-      "00000000",
-      "00000000",
-      "00000000",
-      "00000000"
+      "11111111",
+      "11111111",
+      "11111111",
+      "11111111",
+      "11111111",
+      "11111111",
+      "11111111",
+      "11111111"
     ],
     "intensity": [
       15,
@@ -93,14 +93,14 @@
     ],
     "orphan_bits": 0,
     "rows_hex": [
-      "00",
-      "00",
-      "00",
-      "00",
-      "00",
-      "00",
-      "00",
-      "00"
+      "ff",
+      "ff",
+      "ff",
+      "ff",
+      "ff",
+      "ff",
+      "ff",
+      "ff"
     ],
     "scan_limit": [
       7,
@@ -120,51 +120,41 @@
     {
       "cycle": 1600001,
       "ns": 100000062.5,
-      "text": "byte 200: sets the register pointer"
+      "text": "reg 0x22 BRIGHTNESS [4]"
     },
     {
-      "cycle": 4800000,
-      "ns": 300000000.0,
-      "text": "empty write (address only)"
+      "cycle": 3200001,
+      "ns": 200000062.5,
+      "text": "reg 0x20 START [3]"
     },
     {
-      "cycle": 8000000,
-      "ns": 500000000.0,
-      "text": "Cross to foreign address 0x15"
+      "cycle": 16000000,
+      "ns": 1000000000.0,
+      "text": "reg 0x22 BRIGHTNESS [15]"
     },
     {
-      "cycle": 11200001,
-      "ns": 700000062.5,
-      "text": "2-byte legacy write [20, 5]: rejected, receiver stays responsive"
-    },
-    {
-      "cycle": 72000001,
-      "ns": 4500000062.5,
-      "text": "cmd 26 FlashAll (runs)"
-    },
-    {
-      "cycle": 136000000,
-      "ns": 8500000000.0,
-      "text": "read 2 bytes from 0x14"
+      "cycle": 24000001,
+      "ns": 1500000062.5,
+      "text": "reg 0x22 BRIGHTNESS [16]"
     }
   ],
   "mcu": "atmega328p",
   "scenario": {
     "compare_mode": "settled",
-    "description": "Invalid and malformed I2C traffic: byte 200 (register pointer 0x48 under protocol v1), empty write, foreign address, then a 2-byte legacy write, which is rejected (BAD_LENGTH) and no longer deafens the receiver (the specimen ran Cross and then ignored everything, firmware-map 3.3), so the following FlashAll runs; ends with a master read",
-    "name": "i2c_garbage",
-    "run_ms": 9000,
+    "description": "BRIGHTNESS 4, On 5s started by register, BRIGHTNESS 15 at 1 s, an out-of-range 16 at 1.5 s that is rejected and changes nothing",
+    "name": "reg_brightness",
+    "run_ms": 2000,
     "settle_ms": 10.0,
-    "sha256": "4358a9e8d3ea046fed990b0d30efac36aff0f920392afc0736fa11f79e8823dd",
+    "sha256": "c845c39cd6b05ac84fcf4b525b3398bd83e1db14686522e02acdb7006737cc4d",
     "timing_tolerance_cycles": 8000,
     "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
   },
-  "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-i2c_garbage/stimulus.script",
-  "settled_hash": "48adfdd71294928dc461a0e7cc8038fbfc49dbc3d54a39d24e53e84c4d314bb6",
-  "settled_states": 17,
-  "settled_timing_hash": "99e37eab2053f33e5cce81a6d1135d9363b0ac2903f4fc87df83c8ab30c94dfe",
+  "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-reg_brightness/stimulus.script",
+  "settled_hash": "69570631ecdac68d397bf0a55c1ac8126337d940695564bffd6d2ee7475a491a",
+  "settled_states": 4,
+  "settled_timing_hash": "bcbae0fb360a551a20594f968c338fb25a1189abd6bf81fc23fc78bebf6ffd4c",
   "status": "ok",
-  "timing_hash": "dec8d3fd0140d0cdac2baa35aa44e01a8de1f0c0e56eb47e8ba1cc129c793719",
-  "total_cycles": 144000000,
-  "total_ns": 9000000000.0
+  "timing_hash": "75363976c40ed2467e336398538819076861be5122021c9b35075c2762090fc8",
+  "total_cycles": 32000001,
+  "total_ns": 2000000062.5
 }

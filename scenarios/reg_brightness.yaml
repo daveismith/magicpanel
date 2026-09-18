@@ -1,0 +1,16 @@
+name: reg_brightness
+description: "BRIGHTNESS 4, On 5s started by register, BRIGHTNESS 15 at 1 s, an out-of-range 16 at 1.5 s that is rejected and changes nothing"
+firmware_reset: true
+eeprom: default
+run_ms: 2000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [162, 4] }
+  - at_ms: 200
+    i2c_write: { addr: 0x14, bytes: [160, 3] }
+  - at_ms: 1000
+    i2c_write: { addr: 0x14, bytes: [162, 15] }
+  - at_ms: 1500
+    i2c_write: { addr: 0x14, bytes: [162, 16] }

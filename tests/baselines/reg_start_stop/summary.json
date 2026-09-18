@@ -52,17 +52,17 @@
       }
     }
   },
-  "canonical_hash": "694f66d33d0485ebb4807b8e4c0801d3713fad1309b5d9d9afa55fbcbbecfb86",
+  "canonical_hash": "d9d78f19d44beadda0c83ef48b0c73c0d2141461e407e7e127b23252a21d3fc6",
   "counts": {
-    "display_changes": 263,
+    "display_changes": 159,
     "empty_latches": 1,
-    "events": 14,
+    "events": 10,
     "frames": 632,
     "gpio_changes": 9,
-    "i2c_transactions": 6,
+    "i2c_transactions": 4,
     "latches": 316,
     "malformed_bursts": 0,
-    "script_steps": 12
+    "script_steps": 8
   },
   "diagnostics": [],
   "eeprom": "default:0xff",
@@ -120,51 +120,41 @@
     {
       "cycle": 1600001,
       "ns": 100000062.5,
-      "text": "byte 200: sets the register pointer"
+      "text": "reg 0x20 START [20]"
     },
     {
-      "cycle": 4800000,
-      "ns": 300000000.0,
-      "text": "empty write (address only)"
+      "cycle": 17600001,
+      "ns": 1100000062.5,
+      "text": "reg 0x20 START [21, 0]"
     },
     {
-      "cycle": 8000000,
-      "ns": 500000000.0,
-      "text": "Cross to foreign address 0x15"
+      "cycle": 48000001,
+      "ns": 3000000062.5,
+      "text": "reg 0x21 STOP [1]"
     },
     {
-      "cycle": 11200001,
-      "ns": 700000062.5,
-      "text": "2-byte legacy write [20, 5]: rejected, receiver stays responsive"
-    },
-    {
-      "cycle": 72000001,
-      "ns": 4500000062.5,
-      "text": "cmd 26 FlashAll (runs)"
-    },
-    {
-      "cycle": 136000000,
-      "ns": 8500000000.0,
-      "text": "read 2 bytes from 0x14"
+      "cycle": 64000002,
+      "ns": 4000000125.0,
+      "text": "reg 0x21 STOP [0]"
     }
   ],
   "mcu": "atmega328p",
   "scenario": {
     "compare_mode": "settled",
-    "description": "Invalid and malformed I2C traffic: byte 200 (register pointer 0x48 under protocol v1), empty write, foreign address, then a 2-byte legacy write, which is rejected (BAD_LENGTH) and no longer deafens the receiver (the specimen ran Cross and then ignored everything, firmware-map 3.3), so the following FlashAll runs; ends with a master read",
-    "name": "i2c_garbage",
-    "run_ms": 9000,
+    "description": "Register START of Cross, then Cylon column looping forever (repeat 0) which replaces it; STOP freeze at 3 s keeps the current column lit, STOP blank at 4 s clears it",
+    "name": "reg_start_stop",
+    "run_ms": 4500,
     "settle_ms": 10.0,
-    "sha256": "4358a9e8d3ea046fed990b0d30efac36aff0f920392afc0736fa11f79e8823dd",
+    "sha256": "993b59cc32d89cf96a6959da47f5697c0a006ea6638ee109517bf925579f779b",
     "timing_tolerance_cycles": 8000,
     "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
   },
-  "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-i2c_garbage/stimulus.script",
-  "settled_hash": "48adfdd71294928dc461a0e7cc8038fbfc49dbc3d54a39d24e53e84c4d314bb6",
-  "settled_states": 17,
-  "settled_timing_hash": "99e37eab2053f33e5cce81a6d1135d9363b0ac2903f4fc87df83c8ab30c94dfe",
+  "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-reg_start_stop/stimulus.script",
+  "settled_hash": "85270f8e70b506818784ff742eeec2d08652c95212884eb300cf7a8726dbdaa9",
+  "settled_states": 16,
+  "settled_timing_hash": "ec3b1e22c4ab3347cdf3e25f8b5dcf3de4da6ae2ab1a41e4718473ce7f8f0098",
   "status": "ok",
-  "timing_hash": "dec8d3fd0140d0cdac2baa35aa44e01a8de1f0c0e56eb47e8ba1cc129c793719",
-  "total_cycles": 144000000,
-  "total_ns": 9000000000.0
+  "timing_hash": "cc5a532b87edf7edefaa98be2ba87c0d2b8864dd0fd7d4248ba3806b1a5166ef",
+  "total_cycles": 72000001,
+  "total_ns": 4500000062.5
 }

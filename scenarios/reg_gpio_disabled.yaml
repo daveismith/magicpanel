@@ -1,0 +1,18 @@
+name: reg_gpio_disabled
+description: "Mode 2 (FlashAll) from power-on; CONFIG GPIO_ENABLE cleared and STOP at 1 s; the rotary moves to code 3 at 2 s and is ignored; re-enabling GPIO at 3 s starts TwoLoop (code 3)"
+firmware_reset: true
+eeprom: default
+run_ms: 6000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 0
+    gpio_set: { pin: C1, value: 0 }
+  - at_ms: 1000
+    i2c_write: { addr: 0x14, bytes: [176, 5] }
+  - at_ms: 1100
+    i2c_write: { addr: 0x14, bytes: [161, 0] }
+  - at_ms: 2000
+    gpio_set: { pin: C2, value: 0 }
+  - at_ms: 3000
+    i2c_write: { addr: 0x14, bytes: [176, 7] }
