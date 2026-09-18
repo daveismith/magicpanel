@@ -190,6 +190,9 @@ The board is an **I2C slave**.
 
 ### 3.2 Handler execution context — important
 
+> **Dev sketch differs (D-19):** `MagicPanel.ino` only records the byte in `receiveEvent()`
+> and runs every animation from `loop()`; nothing below about nesting applies to it.
+
 `receiveEvent()` (L1826-2138) is called from **inside the TWI interrupt** (`__vector_24` →
 `twi.c:611 twi_onSlaveReceive` → `Wire.cpp:345 user_onReceive`). It immediately executes
 `sei()` (L1831) and then runs the full blocking animation (seconds to minutes of `delay()`)
@@ -284,6 +287,9 @@ Cases 5-39 (except 1-4, 23-28) are bracketed by `allOFF()` before and after.
 ## 4. Other inputs
 
 ### 4.1 GPIO mode-select inputs (read in `loop()`, L143-161)
+
+> **Dev sketch differs (D-19):** the decoded code is debounced (20 ms stable) and a newly accepted
+> code interrupts the running sequence at once instead of after the current loop pass.
 
 All inputs use **internal pull-ups** and are **active-low**. Read once per ≥1 ms loop pass.
 
@@ -401,7 +407,7 @@ state and must not wait it out; the cycle budget must be chosen accordingly.
 (≈10¹⁰ cycles). Feasible but slow; scenarios for modes 6/7/9 should cover one pattern +
 the start of the off-interval, not several cycles.
 
-**R-4 — Memory corruption in `FadeOutIn` (L826-918).** Every inner loop is
+**R-4 — Memory corruption in `FadeOutIn` (L826-918).** *(Specimen only; contained in the dev sketch, D-21.)* Every inner loop is
 `for (i=0; i<16; i++) SetRow(i, …)` on `VMagicPanel[8][8]`. Rows 8-15 write 64 bytes past the
 array: `.bss` order (ELF symbols) is `VMagicPanel @0x1eb (64 B)`, `QuadrantTime @0x22b`,
 `RandomPixelTime @0x22d`, `Wire @0x22f (12 B)`, `lc @0x23b` (`spidata[16]`, then `status[64]`).
@@ -414,7 +420,7 @@ diverge here, and the diff report should point at this when it happens. `Wire`'s
 `Stream` state and a vtable pointer that the sketch never uses through a virtual call, so no
 crash is expected.
 
-**R-5 — ISR-context animations and nesting** (section 3.2). Stack use grows with each nested
+**R-5 — ISR-context animations and nesting** (section 3.2). *(Specimen only; D-19.)* Stack use grows with each nested
 I2C command; with 2 KB RAM this is fine for a few levels but a back-to-back flood of commands
 during animations nests unboundedly on hardware too. Scenarios should stay within a few levels.
 

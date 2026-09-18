@@ -154,7 +154,7 @@ steps:
 
 Then `make run SCENARIO=my_case`, inspect `runs/my_case/filmstrip.txt`, and when it shows what
 you intend, `make baseline` captures it (only scenarios without a baseline are written). Commit
-`scenarios/my_case.yaml` and `tests/baselines/my_case/` together. The 55 generated scenarios
+`scenarios/my_case.yaml` and `tests/baselines/my_case/` together. The 67 generated scenarios
 come from `tools/gen_scenarios.py`; edit that and regenerate rather than hand-editing them.
 
 ## How and when to re-baseline

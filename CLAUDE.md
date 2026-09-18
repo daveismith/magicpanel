@@ -53,7 +53,8 @@ make harness        # harness/mpsim
 
 Scenario names encode what they exercise: `cmd_NN_*` = I2C command NN, `mode_N_*` = jumper/rotary
 mode N, plus `power_on_default`, `i2c_garbage`, `i2c_mid_animation`, `i2c_back_to_back`,
-`i2c_read_probe`, `mode_change_mid_run`. `list_scenarios` (MCP) or `ls scenarios/` shows them.
+`i2c_read_probe`, `mode_change_mid_run`, and the trigger-semantics set `i2c_retrigger_same`,
+`i2c_switch_no_resume`, `i2c_flood`, `gpio_*`, `i2c_over_gpio_resume`, `random_mode_i2c_resume`. `list_scenarios` (MCP) or `ls scenarios/` shows them.
 
 ## What "matches the baseline" means
 
@@ -72,14 +73,19 @@ sensitive to the *order* of `random()` calls; see `docs/decisions.md` D-1/D-16.
 
 ## Facts about the firmware you will trip over (details in `docs/firmware-map.md`)
 
-- The I2C handler runs the whole animation **inside the TWI ISR** with interrupts re-enabled; a
-  second command mid-animation nests and the outer animation resumes afterwards.
+- **Dev sketch (D-19):** every animation runs from `loop()` as a coroutine (`delay(n)` became
+  `PAT_DELAY(n)`; no local may live across a yield). An I2C command or a debounced (20 ms) change of
+  the rotary/jumper code switches the sequence at the next frame; the same I2C command restarts it;
+  GPIO modes loop and resume after an I2C sequence; code 0 stops a GPIO mode. Scenarios carry an
+  8 000-cycle timing tolerance for the scheduler (D-20).
+- **Specimen only:** the I2C handler runs the whole animation **inside the TWI ISR** with interrupts
+  re-enabled; a second command mid-animation nests and the outer animation resumes afterwards.
 - Only the first byte of an I2C write is read. A multi-byte write executes byte 0 and then
   **deafens the receiver until reset** (`Wire.read()` never drains the buffer). The harness
   supports multi-byte writes because a future firmware may use them.
 - Command 2 falls through into command 3; `allOFF;` (no parentheses) in `allONTimed` is a
   no-op, so commands 1–4 leave the panel on; `FadeOutIn` writes 64 bytes past `VMagicPanel`
-  and can make the next `Quadrant`/`RandomPixel` call do nothing. These are baselined as-is;
+  in the specimen (contained by a spill area in the dev sketch, D-21). These are baselined as-is;
   fixing them is a behaviour change that requires a deliberate re-baseline.
 - Command 1 / jumper mode 8 block for 1000 s; their scenarios only observe the ON state.
 - Row 0 is the top; `SetRow` bit 7 is the leftmost column (assumption A-1, provisional).
