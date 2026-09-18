@@ -4,6 +4,7 @@ SHELL := /bin/bash
 PY    := .venv/bin/python
 SCENARIO ?=
 RUN_ARGS ?=
+PYTEST_ARGS ?= -v
 
 .PHONY: setup venv firmware harness scenarios baseline rebaseline compare test test-fast determinism mutants spikes gif gifs clean help
 
@@ -42,17 +43,17 @@ rebaseline: harness ## replace ONE baseline deliberately: make rebaseline SCENAR
 	@test "$(I_MEAN_IT)" = "1" || { echo "refusing: re-baselining rewrites the golden truth. Re-run with I_MEAN_IT=1 and review tests/baselines/$(SCENARIO)/rebaseline_diff.md"; exit 2; }
 	$(PY) tools/baseline.py capture $(SCENARIO) --i-mean-it
 
-test: firmware harness ## full regression: all scenarios vs baselines, determinism, mutation self-test
-	cd tests && ../$(PY) -m unittest -v test_regression test_determinism test_mutants test_mcp
+test: firmware harness ## full pytest suite: regression, determinism, mutation self-test, MCP
+	$(PY) -m pytest tests $(PYTEST_ARGS)
 
-test-fast: harness ## regression only (assumes build/firmware.elf exists)
-	cd tests && ../$(PY) -m unittest -v test_regression
+test-fast: harness ## regression only (assumes build/firmware.elf exists); MP_SCENARIOS=a,b or -k to narrow
+	$(PY) -m pytest tests/test_regression.py $(PYTEST_ARGS)
 
-determinism: harness ## run the suite twice and require byte-identical display.jsonl
-	cd tests && ../$(PY) -m unittest -v test_determinism
+determinism: harness ## run every scenario twice and require byte-identical artefacts
+	$(PY) -m pytest tests/test_determinism.py $(PYTEST_ARGS)
 
 mutants: harness  ## mutation self-test: every mutant must be detected
-	cd tests && ../$(PY) -m unittest -v test_mutants
+	$(PY) -m pytest tests/test_mutants.py $(PYTEST_ARGS)
 
 gif:              ## animated GIF of a baseline with real timing: make gif SCENARIO=<name> [RUN=1] [GIF_ARGS="--speed 0.25"]
 	@test -n "$(SCENARIO)" || { echo "usage: make gif SCENARIO=<name> [RUN=1] [GIF_ARGS=...]"; exit 2; }
