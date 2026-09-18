@@ -1,0 +1,190 @@
+{
+  "build": {
+    "build_flags": {
+      "SOURCE_DATE_EPOCH": "0",
+      "date_time": "-Werror=date-time",
+      "prefix_map": "-fdebug-prefix-map=<repo>=."
+    },
+    "date_macro_hits": [],
+    "elf": {
+      "absolute_repo_path_in_elf": false,
+      "deterministic": true,
+      "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f",
+      "flash_bytes": 18134,
+      "flash_sha256": "9b5cea576d356c1b1e2b66cd60841a63b48cd0a2235f7f3161dbae8ea3829dfc",
+      "path": "build/firmware.elf",
+      "second_build": {
+        "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f",
+        "flash_sha256": "9b5cea576d356c1b1e2b66cd60841a63b48cd0a2235f7f3161dbae8ea3829dfc"
+      }
+    },
+    "firmware_git": {
+      "dirty": true,
+      "sha": "5fbab370047ea4080733a11db18b0caefd268cba"
+    },
+    "sketch": {
+      "bytes": 40901,
+      "path": "MagicPanel.ino",
+      "sha256": "fa11e25d5d0022d2f0c0450e0735f99edbedb658b3d6852da22ef4d34f6e0bbf"
+    },
+    "toolchain": {
+      "arduino_cli_commit": "01f3d4f2b",
+      "arduino_cli_version": "1.5.1",
+      "avr_gcc_package": "7.3.0-atmel3.6.1-arduino7",
+      "compiler": "avr-gcc (GCC) 7.3.0",
+      "core": "arduino:avr",
+      "core_version": "1.8.6",
+      "fqbn": "arduino:avr:diecimila:cpu=atmega328",
+      "host": {
+        "platform": "darwin",
+        "python": "3.14.4"
+      },
+      "libraries": {
+        "LedControl": {
+          "git_sha": "2714e8b1ca1a8fcc7f6b6d5e77025cb5eb702c3e",
+          "source": "third_party/LedControl (submodule)",
+          "version": "1.0.6"
+        },
+        "Wire": {
+          "source": "bundled with arduino:avr core",
+          "version": "1.8.6"
+        }
+      }
+    }
+  },
+  "canonical_hash": "b252bf1ecbcf780c47b49c0faee52aa8090009b0686ce7e26093cc4f3c986893",
+  "counts": {
+    "display_changes": 55,
+    "empty_latches": 1,
+    "events": 22,
+    "frames": 248,
+    "gpio_changes": 9,
+    "i2c_transactions": 10,
+    "latches": 124,
+    "malformed_bursts": 0,
+    "script_steps": 20
+  },
+  "diagnostics": [],
+  "eeprom": "default:0xff",
+  "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
+  "f_cpu": 16000000,
+  "final_display": {
+    "decode": [
+      0,
+      0
+    ],
+    "display_test": [
+      false,
+      false
+    ],
+    "grid": [
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000"
+    ],
+    "intensity": [
+      15,
+      15
+    ],
+    "orphan_bits": 0,
+    "rows_hex": [
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00"
+    ],
+    "scan_limit": [
+      7,
+      7
+    ],
+    "shutdown": [
+      false,
+      false
+    ]
+  },
+  "firmware": {
+    "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
+    "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f"
+  },
+  "harness_version": "0.1.0",
+  "markers": [
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 20 Cross"
+    },
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 21 CylonCol(2,140)"
+    },
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 22 CylonRow(2,140)"
+    },
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 5 Toggle(10)"
+    },
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 6 Alert(8)"
+    },
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 26 FlashAll(8,200)"
+    },
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 27 FlashV(8,200)"
+    },
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 28 FlashQ(8,200)"
+    },
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 29 TwoLoop(2)"
+    },
+    {
+      "cycle": 1600001,
+      "ns": 100000062.5,
+      "text": "cmd 33 Symbol AI logo"
+    }
+  ],
+  "mcu": "atmega328p",
+  "scenario": {
+    "compare_mode": "settled",
+    "description": "Ten commands queued back to back (about 1.5 ms apart on the bus): no nesting, no malformed burst; each replaces the previous and the last one (Symbol, cmd 33) runs to completion",
+    "name": "i2c_flood",
+    "run_ms": 4500,
+    "settle_ms": 10.0,
+    "sha256": "1f8ccc668c9e7641edaa61c86d48f72351a5acf4b86f4970c7a214b2c051b8a0",
+    "timing_tolerance_cycles": 8000,
+    "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+  },
+  "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-i2c_flood/stimulus.script",
+  "settled_hash": "c4804874ff87e1185185bf2df9446b5a7de89d1742b5e6f9ce92973da43f2f68",
+  "settled_states": 3,
+  "settled_timing_hash": "8263ff0eb52bcb0fc928bc02bbeceaa279689c355d418399a3846159f2f35631",
+  "status": "ok",
+  "timing_hash": "4092a679fd52511fa17c7db0b21f3a7f842db00ca2e63f32b9d7fa0f2c63cd1c",
+  "total_cycles": 72000000,
+  "total_ns": 4500000000.0
+}

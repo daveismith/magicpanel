@@ -1,0 +1,28 @@
+name: i2c_flood
+description: "Ten commands queued back to back (about 1.5 ms apart on the bus): no nesting, no malformed burst; each replaces the previous and the last one (Symbol, cmd 33) runs to completion"
+firmware_reset: true
+eeprom: default
+run_ms: 4500
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [20] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [21] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [22] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [5] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [6] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [26] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [27] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [28] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [29] }
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [33] }

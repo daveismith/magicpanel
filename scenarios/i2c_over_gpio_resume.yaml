@@ -1,0 +1,12 @@
+name: i2c_over_gpio_resume
+description: "Mode 2 (FlashAll, looping) from power-on; Cross (cmd 20) at 1 s replaces it for 3 s, then mode 2 resumes from its start"
+firmware_reset: true
+eeprom: default
+run_ms: 6500
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 0
+    gpio_set: { pin: C1, value: 0 }
+  - at_ms: 1000
+    i2c_write: { addr: 0x14, bytes: [20] }

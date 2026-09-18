@@ -1,0 +1,57 @@
+{
+  "canonical_hash": "f93d6584d45b1b479c898123bcf736eea22d22e45f540fb60176651943e1b78e",
+  "captured_at": "2026-09-18T12:48:04+00:00",
+  "counts": {
+    "display_changes": 7,
+    "empty_latches": 1,
+    "events": 6,
+    "frames": 88,
+    "gpio_changes": 11,
+    "i2c_transactions": 0,
+    "latches": 44,
+    "malformed_bursts": 0,
+    "script_steps": 4
+  },
+  "firmware": {
+    "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f",
+    "flash_sha256": "9b5cea576d356c1b1e2b66cd60841a63b48cd0a2235f7f3161dbae8ea3829dfc",
+    "git": {
+      "dirty": true,
+      "sha": "5fbab370047ea4080733a11db18b0caefd268cba"
+    },
+    "sketch_sha256": "fa11e25d5d0022d2f0c0450e0735f99edbedb658b3d6852da22ef4d34f6e0bbf"
+  },
+  "harness": {
+    "repo_sha": "5fbab370047ea4080733a11db18b0caefd268cba",
+    "simavr_sha": "fe665cef7d309e95bafe7339cdf11fe73d9218b3",
+    "version": "0.1.0"
+  },
+  "random_seed_note": "ADC3 undriven -> randomSeed(0) ignored -> avr-libc default seed (decision D-1)",
+  "scenario": "gpio_debounce_glitch",
+  "scenario_sha256": "6fedbafda91df65ede2527004d6b3819c59384c9a85efbe65c10356de4348af0",
+  "timing_hash": "adba7ad53f64af76ec478dbd9fc9f7759c493cd146cc4fa6ad4fd57ae3aacb2c",
+  "toolchain": {
+    "arduino_cli_commit": "01f3d4f2b",
+    "arduino_cli_version": "1.5.1",
+    "avr_gcc_package": "7.3.0-atmel3.6.1-arduino7",
+    "compiler": "avr-gcc (GCC) 7.3.0",
+    "core": "arduino:avr",
+    "core_version": "1.8.6",
+    "fqbn": "arduino:avr:diecimila:cpu=atmega328",
+    "host": {
+      "platform": "darwin",
+      "python": "3.14.4"
+    },
+    "libraries": {
+      "LedControl": {
+        "git_sha": "2714e8b1ca1a8fcc7f6b6d5e77025cb5eb702c3e",
+        "source": "third_party/LedControl (submodule)",
+        "version": "1.0.6"
+      },
+      "Wire": {
+        "source": "bundled with arduino:avr core",
+        "version": "1.8.6"
+      }
+    }
+  }
+}

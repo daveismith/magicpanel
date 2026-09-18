@@ -449,12 +449,18 @@ byte readInputs() {
   return code;
 }
 
-// A newly accepted rotary/jumper code: codes 1-9 start that mode (abandoning whatever runs),
-// code 0 stops whatever runs and leaves the panel idle.
-void acceptGpio(byte code) {
+// A newly accepted rotary/jumper code. Codes 1-9 blank the panel (as the original did on every
+// mode change) and start that mode, abandoning whatever runs. Code 0 blanks and stops a running
+// GPIO mode; an I2C sequence is left to finish, and nothing resumes after it.
+void acceptGpio(byte code, bool blank) {
   gpioCode = code;
-  if (code != 0) startGpio(code, false);
-  else stopProgram();
+  if (code != 0) {
+    if (blank) blankPANEL();
+    startGpio(code, false);
+  } else if (progKind != PROG_I2C) {
+    if (blank) blankPANEL();
+    stopProgram();
+  }
 }
 
 // GPIO trigger on a stabilised value: the decoded code (not each pin) is debounced. A code is
@@ -467,7 +473,7 @@ void gpioPass() {
     first_time = 0;
     lastDigInState = DigInState;
     gpioCandidate = DigInState;
-    acceptGpio(DigInState);           // power-on code counts as a trigger, without blanking
+    acceptGpio(DigInState, false);    // power-on code counts as a trigger, without blanking
     return;
   }
   if (DigInState != gpioCandidate) {
@@ -477,8 +483,7 @@ void gpioPass() {
   }
   if (gpioCandidate != lastDigInState && time - gpioCandidateSince >= DEBOUNCE_MS) {
     lastDigInState = gpioCandidate;
-    blankPANEL();                     // Clear LED's, as the original did on every mode change
-    acceptGpio(gpioCandidate);
+    acceptGpio(gpioCandidate, true);
   }
 }
 

@@ -1,0 +1,14 @@
+name: gpio_to_zero_after_i2c
+description: "Mode 2 from power-on; Cross (cmd 20) at 1 s; C1 released at 2 s during Cross: code 0 does not interrupt the I2C sequence, Cross finishes and the panel stays idle (no resume)"
+firmware_reset: true
+eeprom: default
+run_ms: 6000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 0
+    gpio_set: { pin: C1, value: 0 }
+  - at_ms: 1000
+    i2c_write: { addr: 0x14, bytes: [20] }
+  - at_ms: 2000
+    gpio_set: { pin: C1, value: 1 }

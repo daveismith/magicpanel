@@ -88,6 +88,51 @@ def main() -> None:
         "return to 0 stops FlashAll mid-run", 7000,
         [gpio(1000, "C1", 0), gpio(5000, "C1", 1)])
 
+    # Main-loop sequence engine (decision D-19): switching, restarting, resuming, debouncing.
+    out["i2c_retrigger_same"] = y("i2c_retrigger_same",
+        "TwoLoop (cmd 29) sent at 100 ms and again at 1100 ms: the second send restarts TwoLoop "
+        "from its first frame", 7200, [i2c(100, 29), i2c(1100, 29)])
+    out["i2c_switch_no_resume"] = y("i2c_switch_no_resume",
+        "Toggle (cmd 5), then FlashAll (cmd 26) at 2.1 s: FlashAll replaces Toggle mid-run and "
+        "Toggle never comes back", 8000, [i2c(100, 5), i2c(2100, 26)])
+    out["i2c_flood"] = y("i2c_flood",
+        "Ten commands queued back to back (about 1.5 ms apart on the bus): no nesting, no malformed "
+        "burst; each replaces the previous and the last one (Symbol, cmd 33) runs to completion",
+        4500, [i2c(100, c) for c in (20, 21, 22, 5, 6, 26, 27, 28, 29, 33)])
+    out["gpio_interrupts_i2c"] = y("gpio_interrupts_i2c",
+        "Toggle (cmd 5) running, then C1 goes low at 2 s: after the 20 ms debounce the panel blanks "
+        "and mode 2 (FlashAll, looping) replaces Toggle", 6000, [i2c(100, 5), gpio(2000, "C1", 0)])
+    out["i2c_over_gpio_resume"] = y("i2c_over_gpio_resume",
+        "Mode 2 (FlashAll, looping) from power-on; Cross (cmd 20) at 1 s replaces it for 3 s, then "
+        "mode 2 resumes from its start", 6500, [gpio(0, "C1", 0), i2c(1000, 20)])
+    out["gpio_switch_mode"] = y("gpio_switch_mode",
+        "Mode 3 (C1+C2 low, TwoLoop) from power-on; C1 released at 2 s leaves code 1: after the "
+        "debounce the panel blanks and FadeOutIn replaces TwoLoop", 7000,
+        [gpio(0, "C1", 0), gpio(0, "C2", 0), gpio(2000, "C1", 1)])
+    out["gpio_to_zero_stops"] = y("gpio_to_zero_stops",
+        "Mode 2 (FlashAll) from power-on; C1 released at 1.5 s: code 0 is accepted after the "
+        "debounce, the panel blanks and stays off", 4000, [gpio(0, "C1", 0), gpio(1500, "C1", 1)])
+    out["gpio_rotary_transit"] = y("gpio_rotary_transit",
+        "Rotary moves from code 3 to code 4 through code 2 and code 0 (5 ms each): only code 4 is "
+        "stable long enough, so TwoLoop is replaced by TraceDown once, with no idle in between",
+        5000, [gpio(0, "C1", 0), gpio(0, "C2", 0), gpio(2000, "C2", 1), gpio(2005, "C1", 1),
+               gpio(2010, "C0", 0)])
+    out["gpio_jumper_override_no_retrigger"] = y("gpio_jumper_override_no_retrigger",
+        "Jumper 1 (B3) from power-on gives mode 8 (panel on); C0 goes low at 500 ms but the jumper "
+        "overrides the rotary, the code stays 8, so nothing blanks or restarts", 1500,
+        [gpio(0, "B3", 0), gpio(500, "C0", 0)])
+    out["gpio_debounce_glitch"] = y("gpio_debounce_glitch",
+        "A 5 ms low pulse on C1 at 1 s is shorter than the 20 ms debounce and is ignored", 2000,
+        [gpio(1000, "C1", 0), gpio(1005, "C1", 1)])
+    out["gpio_to_zero_after_i2c"] = y("gpio_to_zero_after_i2c",
+        "Mode 2 from power-on; Cross (cmd 20) at 1 s; C1 released at 2 s during Cross: code 0 does "
+        "not interrupt the I2C sequence, Cross finishes and the panel stays idle (no resume)", 6000,
+        [gpio(0, "C1", 0), i2c(1000, 20), gpio(2000, "C1", 1)])
+    out["random_mode_i2c_resume"] = y("random_mode_i2c_resume",
+        "Mode 6 (Random) from power-on; Cross (cmd 20) at 1 s interrupts its first pattern; after "
+        "Cross the Random mode resumes in its off interval, so the panel stays off", 6000,
+        [gpio(0, "C0", 0), gpio(0, "C1", 0), i2c(1000, 20)])
+
     for name, text in out.items():
         (SCENARIO_DIR / f"{name}.yaml").write_text(text)
     print(f"wrote {len(out)} scenarios to {SCENARIO_DIR}")
