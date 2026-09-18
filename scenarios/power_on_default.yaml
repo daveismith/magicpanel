@@ -3,5 +3,7 @@ description: "No stimulus: constructor + setup() init sequence, then idle in mod
 firmware_reset: true
 eeprom: default
 run_ms: 2000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
 steps:
 

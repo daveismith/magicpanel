@@ -9,29 +9,23 @@
     "elf": {
       "absolute_repo_path_in_elf": false,
       "deterministic": true,
-      "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
-      "flash_bytes": 13700,
-      "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
+      "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c",
+      "flash_bytes": 18106,
+      "flash_sha256": "b1c590f3881bd7a42986efaa85009567aec39c0ecc7b4c11beaa25ac0660079f",
       "path": "build/firmware.elf",
-      "reference": {
-        "elf_sha256": "36099b3475506f998d7c7374fa53c522d365db38452210c0f321c91da0414966",
-        "flash_matches": true,
-        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
-        "path": "/Users/davids/Documents/Source/git/magicpanel/MagicPanel_v010_5.ino.elf"
-      },
       "second_build": {
-        "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
-        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a"
+        "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c",
+        "flash_sha256": "b1c590f3881bd7a42986efaa85009567aec39c0ecc7b4c11beaa25ac0660079f"
       }
     },
     "firmware_git": {
-      "dirty": false,
-      "sha": "8508e6277dd7546abf7d9ccd8ffe422367f4055b"
+      "dirty": true,
+      "sha": "6bdaaf91c97fcc70b2cdffb3bab86f8b62e7a788"
     },
     "sketch": {
-      "bytes": 57565,
-      "path": "MagicPanel_v010_5.ino",
-      "sha256": "f213fd7a68dd00307d1231cb648f2f7b223c4232dbc9780440ecc2253de6b638"
+      "bytes": 40755,
+      "path": "MagicPanel.ino",
+      "sha256": "116180dfc81a0476ac98ebfd014ec33f0815fb5943b49fd17dcfe61f1704c058"
     },
     "toolchain": {
       "arduino_cli_commit": "01f3d4f2b",
@@ -58,15 +52,15 @@
       }
     }
   },
-  "canonical_hash": "ee112823e659b68c904f6965a790b690a37821bd18a4ae6106e6177cdf512e81",
+  "canonical_hash": "0204a7f003e8d55a2d0398411b1d6dedb291a12501bf5db6d7d833427ffaaa77",
   "counts": {
-    "display_changes": 351,
+    "display_changes": 95,
     "empty_latches": 1,
     "events": 6,
-    "frames": 888,
+    "frames": 344,
     "gpio_changes": 9,
     "i2c_transactions": 2,
-    "latches": 444,
+    "latches": 172,
     "malformed_bursts": 0,
     "script_steps": 4
   },
@@ -119,33 +113,38 @@
   },
   "firmware": {
     "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
-    "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb"
+    "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c"
   },
   "harness_version": "0.1.0",
   "markers": [
     {
-      "cycle": 1600001,
-      "ns": 100000062.5,
+      "cycle": 1600000,
+      "ns": 100000000.0,
       "text": "cmd 5 Toggle(10)"
     },
     {
-      "cycle": 33600000,
-      "ns": 2100000000.0,
+      "cycle": 33600003,
+      "ns": 2100000187.5,
       "text": "cmd 20 Cross"
     }
   ],
   "mcu": "atmega328p",
   "scenario": {
-    "description": "Cross (3 s) sent while Toggle (10 s) is running: nested receiveEvent inside the TWI ISR; the outer Toggle resumes after Cross finishes",
+    "compare_mode": "settled",
+    "description": "Cross (3 s) sent while Toggle (10 s) is running: Cross replaces Toggle at the next frame boundary and Toggle does not resume (the specimen nested Cross inside the TWI ISR and resumed Toggle afterwards)",
     "name": "i2c_mid_animation",
     "run_ms": 15000,
-    "sha256": "c3e19524edd5e7b211f50a974afa7f792f975dea5eecc5675ff90d9b1c6e989d",
-    "timing_tolerance_cycles": 0,
-    "timing_tolerance_reason": ""
+    "settle_ms": 10.0,
+    "sha256": "0185a31b100c220118e1b7a5e64e1c4759b98bc899dde840f0d0e34375f53f57",
+    "timing_tolerance_cycles": 8000,
+    "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
   },
   "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-i2c_mid_animation/stimulus.script",
+  "settled_hash": "15a16e90ae896f5fcd9ca6ae525ca753eb1c9af02e525834bbadba060ca01f7f",
+  "settled_states": 7,
+  "settled_timing_hash": "d4d6420df925db6135b46864863ee89c90dc4e2eab7c4c57ac8655a7dfacf7d7",
   "status": "ok",
-  "timing_hash": "803a901debc84cb0a69b799975a39b4a5047ddfc01591916cbc0af01f9bd3f1d",
+  "timing_hash": "eb3896d95d862fe6989750020c0a21738424ad391f1f655c2725e532daeacf68",
   "total_cycles": 240000000,
   "total_ns": 15000000000.0
 }

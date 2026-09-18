@@ -1,35 +1,35 @@
 {
-  "canonical_hash": "9933adc66ea35860d98a265e8066d268213b06c7071a432245208efa2a3c2adc",
-  "captured_at": "2026-09-18T02:36:48+00:00",
+  "canonical_hash": "71004205333b0ab771a27f02439f109f5ed06cd75bef2f152c72cc6426ef0b46",
+  "captured_at": "2026-09-18T12:43:11+00:00",
   "counts": {
-    "display_changes": 471,
+    "display_changes": 327,
     "empty_latches": 1,
     "events": 6,
-    "frames": 1144,
+    "frames": 888,
     "gpio_changes": 11,
     "i2c_transactions": 0,
-    "latches": 572,
+    "latches": 444,
     "malformed_bursts": 0,
     "script_steps": 4
   },
   "firmware": {
-    "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
-    "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
+    "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c",
+    "flash_sha256": "b1c590f3881bd7a42986efaa85009567aec39c0ecc7b4c11beaa25ac0660079f",
     "git": {
-      "dirty": false,
-      "sha": "8508e6277dd7546abf7d9ccd8ffe422367f4055b"
+      "dirty": true,
+      "sha": "6bdaaf91c97fcc70b2cdffb3bab86f8b62e7a788"
     },
-    "sketch_sha256": "f213fd7a68dd00307d1231cb648f2f7b223c4232dbc9780440ecc2253de6b638"
+    "sketch_sha256": "116180dfc81a0476ac98ebfd014ec33f0815fb5943b49fd17dcfe61f1704c058"
   },
   "harness": {
-    "repo_sha": "1a9cb5e3e5e498ed18c40005a862e0c7a4d273cc",
+    "repo_sha": "6bdaaf91c97fcc70b2cdffb3bab86f8b62e7a788",
     "simavr_sha": "fe665cef7d309e95bafe7339cdf11fe73d9218b3",
     "version": "0.1.0"
   },
   "random_seed_note": "ADC3 undriven -> randomSeed(0) ignored -> avr-libc default seed (decision D-1)",
   "scenario": "mode_change_mid_run",
-  "scenario_sha256": "75b360f593f9586ff52d4756859041e075351388d26b9eec48d4b36a88db3a76",
-  "timing_hash": "7199fcd5b62be2ae4ed9212ebd36832b25ff48de846407b5d04582aaf767edd0",
+  "scenario_sha256": "ca5a47753ba5996a90985487bd332f271eb1eb58c743ae0e3ee2a5834b464243",
+  "timing_hash": "9d75bbcda2b650194963d5997412d7ebf0b90246427b36187a160fb3fcdb09cd",
   "toolchain": {
     "arduino_cli_commit": "01f3d4f2b",
     "arduino_cli_version": "1.5.1",

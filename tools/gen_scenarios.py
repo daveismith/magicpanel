@@ -9,6 +9,14 @@ from mplib import I2C_COMMANDS, JUMPER_MODES, SCENARIO_DIR, SLAVE_ADDR
 
 SEND_MS = 100
 
+# Decision D-20: the dev firmware schedules frames from loop() instead of delay(); each settled
+# frame lands within ~0.2 ms of the specimen's (worst measured 3 347 cycles, mode_5_onetest).
+# 8 000 cycles (0.5 ms) leaves headroom yet stays far below the smallest real timing difference
+# the suite must catch (20 ms toggle_faster mutant; 50 ms per step between Alert and FlashAll).
+TIMING_TOLERANCE_CYCLES = 8000
+TIMING_TOLERANCE_REASON = ("D-20: frames are scheduled from loop() (main-loop sequence engine), not "
+                           "delay(); settled frames land within ~0.2 ms of the specimen's")
+
 
 def budget(nominal_ms: int, sends: int = 1) -> int:
     """Nominal delay() time + ~10% for the bit-banged PrintGrid transfers + 700 ms margin."""
@@ -18,7 +26,8 @@ def budget(nominal_ms: int, sends: int = 1) -> int:
 def y(name: str, description: str, run_ms: int, steps: list[str], extra: str = "") -> str:
     body = "\n".join(steps)
     return (f"name: {name}\ndescription: {json.dumps(description)}\nfirmware_reset: true\neeprom: default\n"
-            f"run_ms: {run_ms}\n{extra}steps:\n{body}\n")
+            f"run_ms: {run_ms}\ntiming_tolerance_cycles: {TIMING_TOLERANCE_CYCLES}\n"
+            f"timing_tolerance_reason: {json.dumps(TIMING_TOLERANCE_REASON)}\n{extra}steps:\n{body}\n")
 
 
 def i2c(at_ms: int, *data: int, addr: int = SLAVE_ADDR, label: str | None = None) -> str:
@@ -63,17 +72,20 @@ def main() -> None:
                i2c(4500, 26, label="cmd 26 FlashAll after deafening (expect ignored)"),
                "  - at_ms: 8500\n    i2c_read: { addr: 0x14, n: 2 }"])
     out["i2c_mid_animation"] = y("i2c_mid_animation",
-        "Cross (3 s) sent while Toggle (10 s) is running: nested receiveEvent inside the TWI ISR; "
-        "the outer Toggle resumes after Cross finishes", 15000, [i2c(100, 5), i2c(2100, 20)])
+        "Cross (3 s) sent while Toggle (10 s) is running: Cross replaces Toggle at the next frame "
+        "boundary and Toggle does not resume (the specimen nested Cross inside the TWI ISR and "
+        "resumed Toggle afterwards)", 15000, [i2c(100, 5), i2c(2100, 20)])
     out["i2c_back_to_back"] = y("i2c_back_to_back",
         "Three commands queued with no gap: Symbol, then Cross, then allOFF; each later command "
-        "nests inside the previous handler", 9000, [i2c(100, 33), i2c(100, 20), i2c(100, 0)])
+        "replaces the previous one, so the panel ends off (the specimen nested each handler and "
+        "corrupted a burst)", 9000, [i2c(100, 33), i2c(100, 20), i2c(100, 0)])
     out["i2c_read_probe"] = y("i2c_read_probe",
         "Master read from the slave (no onRequest handler: firmware answers a single 0x00), "
         "then allOFF", 1500, ["  - at_ms: 100\n    i2c_read: { addr: 0x14, n: 2 }", i2c(400, 0)])
     out["mode_change_mid_run"] = y("mode_change_mid_run",
         "Rotary changes at runtime: mode 0 -> mode 2 (FlashAll repeating) at 1 s -> mode 0 at 5 s; "
-        "each change must blank the panel (blankPANEL)", 7000,
+        "each change is accepted after the 20 ms debounce, blanks the panel (blankPANEL), and the "
+        "return to 0 stops FlashAll mid-run", 7000,
         [gpio(1000, "C1", 0), gpio(5000, "C1", 1)])
 
     for name, text in out.items():

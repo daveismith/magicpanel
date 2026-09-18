@@ -3,6 +3,8 @@ description: "Jumper/rotary mode 4 (C0 low at power-on): TraceDown(5,1) repeatin
 firmware_reset: true
 eeprom: default
 run_ms: 17800
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
 steps:
   - at_ms: 0
     gpio_set: { pin: C0, value: 0 }

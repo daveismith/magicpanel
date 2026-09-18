@@ -9,29 +9,23 @@
     "elf": {
       "absolute_repo_path_in_elf": false,
       "deterministic": true,
-      "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
-      "flash_bytes": 13700,
-      "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
+      "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c",
+      "flash_bytes": 18106,
+      "flash_sha256": "b1c590f3881bd7a42986efaa85009567aec39c0ecc7b4c11beaa25ac0660079f",
       "path": "build/firmware.elf",
-      "reference": {
-        "elf_sha256": "36099b3475506f998d7c7374fa53c522d365db38452210c0f321c91da0414966",
-        "flash_matches": true,
-        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
-        "path": "/Users/davids/Documents/Source/git/magicpanel/MagicPanel_v010_5.ino.elf"
-      },
       "second_build": {
-        "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
-        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a"
+        "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c",
+        "flash_sha256": "b1c590f3881bd7a42986efaa85009567aec39c0ecc7b4c11beaa25ac0660079f"
       }
     },
     "firmware_git": {
-      "dirty": false,
-      "sha": "8508e6277dd7546abf7d9ccd8ffe422367f4055b"
+      "dirty": true,
+      "sha": "6bdaaf91c97fcc70b2cdffb3bab86f8b62e7a788"
     },
     "sketch": {
-      "bytes": 57565,
-      "path": "MagicPanel_v010_5.ino",
-      "sha256": "f213fd7a68dd00307d1231cb648f2f7b223c4232dbc9780440ecc2253de6b638"
+      "bytes": 40755,
+      "path": "MagicPanel.ino",
+      "sha256": "116180dfc81a0476ac98ebfd014ec33f0815fb5943b49fd17dcfe61f1704c058"
     },
     "toolchain": {
       "arduino_cli_commit": "01f3d4f2b",
@@ -58,15 +52,15 @@
       }
     }
   },
-  "canonical_hash": "9933adc66ea35860d98a265e8066d268213b06c7071a432245208efa2a3c2adc",
+  "canonical_hash": "71004205333b0ab771a27f02439f109f5ed06cd75bef2f152c72cc6426ef0b46",
   "counts": {
-    "display_changes": 471,
+    "display_changes": 327,
     "empty_latches": 1,
     "events": 6,
-    "frames": 1144,
+    "frames": 888,
     "gpio_changes": 11,
     "i2c_transactions": 0,
-    "latches": 572,
+    "latches": 444,
     "malformed_bursts": 0,
     "script_steps": 4
   },
@@ -84,14 +78,14 @@
       false
     ],
     "grid": [
-      "11111111",
-      "11111111",
-      "11111111",
-      "11111111",
-      "11111111",
-      "11111111",
-      "11111111",
-      "11111111"
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000"
     ],
     "intensity": [
       15,
@@ -99,14 +93,14 @@
     ],
     "orphan_bits": 0,
     "rows_hex": [
-      "ff",
-      "ff",
-      "ff",
-      "ff",
-      "ff",
-      "ff",
-      "ff",
-      "ff"
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00"
     ],
     "scan_limit": [
       7,
@@ -119,13 +113,13 @@
   },
   "firmware": {
     "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
-    "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb"
+    "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c"
   },
   "harness_version": "0.1.0",
   "markers": [
     {
-      "cycle": 16000000,
-      "ns": 1000000000.0,
+      "cycle": 16000001,
+      "ns": 1000000062.5,
       "text": "gpio C1=0"
     },
     {
@@ -136,16 +130,21 @@
   ],
   "mcu": "atmega328p",
   "scenario": {
-    "description": "Rotary changes at runtime: mode 0 -> mode 2 (FlashAll repeating) at 1 s -> mode 0 at 5 s; each change must blank the panel (blankPANEL)",
+    "compare_mode": "settled",
+    "description": "Rotary changes at runtime: mode 0 -> mode 2 (FlashAll repeating) at 1 s -> mode 0 at 5 s; each change is accepted after the 20 ms debounce, blanks the panel (blankPANEL), and the return to 0 stops FlashAll mid-run",
     "name": "mode_change_mid_run",
     "run_ms": 7000,
-    "sha256": "75b360f593f9586ff52d4756859041e075351388d26b9eec48d4b36a88db3a76",
-    "timing_tolerance_cycles": 0,
-    "timing_tolerance_reason": ""
+    "settle_ms": 10.0,
+    "sha256": "ca5a47753ba5996a90985487bd332f271eb1eb58c743ae0e3ee2a5834b464243",
+    "timing_tolerance_cycles": 8000,
+    "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
   },
   "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-mode_change_mid_run/stimulus.script",
+  "settled_hash": "44fab54dd348fd63766e940414029ef3e4493a733f6ed19633e30ab854fbc9eb",
+  "settled_states": 21,
+  "settled_timing_hash": "b1627345361595a0d64ca21cb23ed382750ff1bd593ced70f83678ffa1988bb2",
   "status": "ok",
-  "timing_hash": "7199fcd5b62be2ae4ed9212ebd36832b25ff48de846407b5d04582aaf767edd0",
+  "timing_hash": "9d75bbcda2b650194963d5997412d7ebf0b90246427b36187a160fb3fcdb09cd",
   "total_cycles": 112000000,
   "total_ns": 7000000000.0
 }

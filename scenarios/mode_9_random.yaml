@@ -3,6 +3,8 @@ description: "Jumper/rotary mode 9 (B5 low at power-on): Random(8000..14000) jum
 firmware_reset: true
 eeprom: default
 run_ms: 26300
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
 steps:
   - at_ms: 0
     gpio_set: { pin: B5, value: 0 }

@@ -1,8 +1,10 @@
 name: i2c_back_to_back
-description: "Three commands queued with no gap: Symbol, then Cross, then allOFF; each later command nests inside the previous handler"
+description: "Three commands queued with no gap: Symbol, then Cross, then allOFF; each later command replaces the previous one, so the panel ends off (the specimen nested each handler and corrupted a burst)"
 firmware_reset: true
 eeprom: default
 run_ms: 9000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
 steps:
   - at_ms: 100
     i2c_write: { addr: 0x14, bytes: [33] }
