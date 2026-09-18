@@ -11,3 +11,6 @@ tools/arduino-data/
 .venv/
 __pycache__/
 harness/mpsim
+# derived visualisations
+tests/baselines/*/sequence.gif
+*.gif

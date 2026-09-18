@@ -28,7 +28,7 @@ runs/<id>/                  per-run artefacts (gitignored)
 ## Prerequisites
 
 Everything version-sensitive is pinned in `tools/versions.env` and installed **inside the repo**
-by `make setup` (arduino-cli 1.5.1, AVR core 1.8.6 with avr-gcc 7.3.0, PyYAML, mcp). The host
+by `make setup` (arduino-cli 1.5.1, AVR core 1.8.6 with avr-gcc 7.3.0, PyYAML, mcp, Pillow). The host
 only needs:
 
 | | macOS (Apple Silicon) | Linux x86-64 (Ubuntu 24.04 / CI) |
@@ -82,6 +82,24 @@ Script lines: `run_ms N`, `at_ms T i2c_write 0x14 20`, `at_ms T i2c_read 0x14 2`
 `at_ms T gpio_set C2 0`, `at_ms T gpio_release C2`, `at_ms T marker text` (`at_cycle` /
 `run_cycles` also accepted). Interactive mode takes the same actions plus `step_ms N`,
 `step_cycles N`, `display`, `status`, `quit` on stdin and answers one JSON line each on stdout.
+
+## Watching a sequence as an animated GIF
+
+```sh
+make gif SCENARIO=cmd_29_twoloop                      # tests/baselines/cmd_29_twoloop/sequence.gif
+make gif SCENARIO=cmd_29_twoloop RUN=1                # runs/cmd_29_twoloop/sequence.gif
+make gif SCENARIO=cmd_21_cyloncol GIF_ARGS="--speed 0.25"   # 4x slow motion
+make gifs                                             # every baseline
+```
+
+`tools/render_gif.py` draws each panel state as an 8×8 LED grid (brightness follows the
+intensity register, shut-down devices go dark) with the state index, simulated time, the
+active command marker and a progress bar. Frame durations are the real gaps between states
+(cycles ÷ 16 000 ms), so the GIF plays at the panel's actual speed. GIF viewers cannot show
+gaps under ~20 ms, so the ~0.5 ms intermediate latch states of a `PrintGrid()` are merged
+into the next visible frame without moving the timeline; `--all-states` shows every one with
+a fixed hold instead (timing is then not real), and `--min-frame-ms` tunes the merge. GIFs
+are derived artefacts and are not committed. The MCP tool `render_gif` does the same.
 
 ## Reading a diff report
 

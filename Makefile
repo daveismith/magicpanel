@@ -5,7 +5,7 @@ PY    := .venv/bin/python
 SCENARIO ?=
 RUN_ARGS ?=
 
-.PHONY: setup venv firmware harness scenarios baseline rebaseline compare test test-fast determinism mutants spikes clean help
+.PHONY: setup venv firmware harness scenarios baseline rebaseline compare test test-fast determinism mutants spikes gif gifs clean help
 
 help:             ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -53,6 +53,13 @@ determinism: harness ## run the suite twice and require byte-identical display.j
 
 mutants: harness  ## mutation self-test: every mutant must be detected
 	cd tests && ../$(PY) -m unittest -v test_mutants
+
+gif:              ## animated GIF of a baseline with real timing: make gif SCENARIO=<name> [RUN=1] [GIF_ARGS="--speed 0.25"]
+	@test -n "$(SCENARIO)" || { echo "usage: make gif SCENARIO=<name> [RUN=1] [GIF_ARGS=...]"; exit 2; }
+	$(PY) tools/render_gif.py $(SCENARIO) $(if $(RUN),--run,) $(GIF_ARGS)
+
+gifs:             ## render sequence.gif for every baseline (derived artefacts, gitignored)
+	@for s in $$(ls scenarios/*.yaml | xargs -n1 basename | sed 's/.yaml//'); do $(PY) tools/render_gif.py $$s $(GIF_ARGS) || exit 1; done
 
 spikes:           ## Phase 1 spikes against the precompiled ELF
 	$(MAKE) -C spikes run

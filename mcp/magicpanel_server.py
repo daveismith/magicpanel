@@ -152,6 +152,23 @@ def run_all(firmware: str | None = None) -> dict[str, Any]:
     return {"pass": ok, "passed": sum(1 for r in rows if r["pass"]), "failed": sum(1 for r in rows if r["pass"] is False), "table": table}
 
 
+@server.tool()
+def render_gif(scenario: str, source: str = "baseline", run_id: str | None = None, speed: float = 1.0,
+               all_states: bool = False) -> dict[str, Any]:
+    """Render a display sequence as an animated GIF whose frame durations follow the recorded
+    cycle timestamps (speed < 1 slows playback; all_states shows every intermediate latch with a
+    fixed hold instead of real timing). source is 'baseline' (tests/baselines/<scenario>) or
+    'run' (runs/<run_id or scenario>). Returns the file path; open it in an image viewer."""
+    from render_gif import render
+    if source == "run":
+        src = mplib.RUNS_DIR / (run_id or scenario); title = f"run {src.name}"
+    else:
+        src = mplib.BASELINE_DIR / scenario; title = f"baseline {scenario}"
+    if not (src / "display.jsonl").exists():
+        return {"error": f"no display.jsonl in {src}"}
+    return render(src, src / "sequence.gif", title, speed=speed, all_states=all_states)
+
+
 # ------------------------------------------------------------------ interactive
 class Session:
     def __init__(self, sid: str, elf: Path, eeprom: Path | None):
