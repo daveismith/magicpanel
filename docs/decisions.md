@@ -167,3 +167,35 @@ that is never displayed. FadeOutIn still sets 16 rows with the same expressions 
 calls and per-frame cost are unchanged) but can no longer overwrite other globals. The specimen's
 side effect (a later Quadrant/RandomPixel doing nothing, firmware-map R-4) is gone; the per-pattern
 counters it corrupted no longer exist. No baseline depended on it.
+
+**D-22 — I2C register interface, protocol v1 (2026-09-18, owner decisions).** Specified in
+`docs/i2c-protocol.md`, with constants in `docs/magicpanel_i2c.h`.
+- *Legacy compatibility.* A register access sets bit 7 of byte 0 (the TSL2561-style command
+  bit), so a lone byte 0x00–0x7F can remain a legacy command. The owner chose "legacy behind a
+  flag": `CONFIG.LEGACY` lives in EEPROM, and a blank or corrupt EEPROM loads factory values
+  (legacy on, GPIO on, resume on, brightness 15). An unmodified panel is therefore a drop-in
+  replacement, and every pre-existing baseline except `i2c_garbage` passes unchanged.
+- *`i2c_garbage` re-baselined deliberately.* The 2-byte legacy write `[20, 5]` is now rejected
+  (`BAD_LENGTH`) instead of running Cross and deafening the receiver, so the later FlashAll runs.
+- *Catalogue.* IDs 0–39 are the legacy commands with their quirks kept (owner decision). 40 and
+  41 are the Random() shows, previously GPIO-only. Looping any sequence is `START` with
+  repeat 0. `INFO_LENGTH_MS` is measured, not computed: `tools/measure_lengths.py` starts each
+  sequence in simulation and reads the firmware's own `ELAPSED_MS` at completion. Command 1 is
+  derived from command 3, and a slow test keeps the table honest.
+- *Concurrency.* The TWI interrupt only decodes, validates and posts. There is one start/stop
+  slot (last wins), plus brightness and save requests. `consumeI2C()` carries them out between
+  frames, so the ISR never clocks the MAX7221s or writes EEPROM. Reads are served entirely inside
+  the ISR from PROGMEM and variables the main loop updates with interrupts off, so they never
+  tear.
+- *No read-to-clear, no "preempted" state.* A slave cannot tell how many bytes the master
+  clocked out, so errors are a sticky code plus a wrapping counter. The status block always
+  describes the newest run, so a preempted state could never be observed. `RUN_COUNTER` is how a
+  controller detects that its run was replaced.
+- *Random order kept.* Every received write, including pointer sets and status polls, still
+  consumes one `random()` and resets `RandomTime`, exactly as the specimen's handler did (D-16).
+  Master reads consume nothing.
+- *Harness `i2c_write_read`.* This is a write and a read queued back to back. simavr cannot put
+  a repeated START on the bus without colliding with the pending STOP state (D-11). A real
+  ATmega slave reports the same TWSR sequence for a repeated START as for STOP+START (0xA0,
+  then 0xA8), so the firmware path under test is identical. `--eeprom-out` dumps the final
+  EEPROM, so `SAVE` can be checked.

@@ -80,10 +80,14 @@ Run directory contents:
 
 ```
 harness/mpsim --elf FW.elf --out DIR [--script FILE | --run-ms N | --run-cycles N]
-              [--eeprom FILE] [--no-vcd] [--interactive] [--quiet]
+              [--eeprom FILE] [--eeprom-out FILE] [--no-vcd] [--interactive] [--quiet]
 ```
 
+`--eeprom-out FILE` writes the final 1024-byte EEPROM image when the run ends.
+
 Script lines: `run_ms N`, `at_ms T i2c_write 0x14 20`, `at_ms T i2c_read 0x14 2`,
+`at_ms T i2c_write_read 0x14 16 144` (write the bytes after the length, then read that many with
+nothing in between; decision D-22),
 `at_ms T gpio_set C2 0`, `at_ms T gpio_release C2`, `at_ms T marker text` (`at_cycle` /
 `run_cycles` also accepted). Interactive mode takes the same actions plus `step_ms N`,
 `step_cycles N`, `display`, `status`, `quit` on stdin and answers one JSON line each on stdout.
@@ -144,6 +148,8 @@ steps:
     i2c_write: { addr: 0x14, bytes: [20] }   # one byte per command for today's firmware
   - at_ms: 3500
     i2c_read: { addr: 0x14, n: 2 }
+  - at_ms: 3600
+    i2c_write_read: { addr: 0x14, bytes: [0x90], n: 16 }   # register pointer, then read
   - at_ms: 4000
     gpio_set: { pin: C2, value: 0 }          # active-low rotary/jumper inputs
   - at_ms: 5000
@@ -154,7 +160,7 @@ steps:
 
 Then `make run SCENARIO=my_case`, inspect `runs/my_case/filmstrip.txt`, and when it shows what
 you intend, `make baseline` captures it (only scenarios without a baseline are written). Commit
-`scenarios/my_case.yaml` and `tests/baselines/my_case/` together. The 67 generated scenarios
+`scenarios/my_case.yaml` and `tests/baselines/my_case/` together. The 73 generated scenarios
 come from `tools/gen_scenarios.py`; edit that and regenerate rather than hand-editing them.
 
 ## How and when to re-baseline
@@ -178,7 +184,7 @@ baselines move, that is a finding to understand, not something to paper over.
 
 `.mcp.json` registers `magicpanel` (stdio, `mcp/serve.sh` → `.venv/bin/python mcp/magicpanel_server.py`).
 Tools: `build_firmware`, `list_scenarios`, `describe_firmware`, `run_scenario`,
-`compare_to_baseline`, `run_all`, `sim_start`, `sim_step`, `sim_i2c_write`, `sim_i2c_read`,
+`compare_to_baseline`, `run_all`, `sim_start`, `sim_step`, `sim_i2c_write`, `sim_i2c_read`, `sim_i2c_write_read`,
 `sim_set_gpio`, `sim_release_gpio`, `sim_get_display`, `sim_get_log`, `sim_stop`,
 `update_baseline` (gated). Typical interactive use: `sim_start` → `sim_step ms=100` →
 `sim_i2c_write bytes=[20]` → `sim_step ms=200` → `sim_get_display`. Session logs live under

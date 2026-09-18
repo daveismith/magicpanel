@@ -53,8 +53,9 @@ make harness        # harness/mpsim
 
 Scenario names encode what they exercise: `cmd_NN_*` = I2C command NN, `mode_N_*` = jumper/rotary
 mode N, plus `power_on_default`, `i2c_garbage`, `i2c_mid_animation`, `i2c_back_to_back`,
-`i2c_read_probe`, `mode_change_mid_run`, and the trigger-semantics set `i2c_retrigger_same`,
-`i2c_switch_no_resume`, `i2c_flood`, `gpio_*`, `i2c_over_gpio_resume`, `random_mode_i2c_resume`. `list_scenarios` (MCP) or `ls scenarios/` shows them.
+`i2c_read_probe`, `mode_change_mid_run`, the trigger-semantics set `i2c_retrigger_same`,
+`i2c_switch_no_resume`, `i2c_flood`, `gpio_*`, `i2c_over_gpio_resume`, `random_mode_i2c_resume`,
+and `reg_*` for the I2C register interface. `list_scenarios` (MCP) or `ls scenarios/` shows them.
 
 ## What "matches the baseline" means
 
@@ -80,9 +81,14 @@ sensitive to the *order* of `random()` calls; see `docs/decisions.md` D-1/D-16.
   8 000-cycle timing tolerance for the scheduler (D-20).
 - **Specimen only:** the I2C handler runs the whole animation **inside the TWI ISR** with interrupts
   re-enabled; a second command mid-animation nests and the outer animation resumes afterwards.
-- Only the first byte of an I2C write is read. A multi-byte write executes byte 0 and then
-  **deafens the receiver until reset** (`Wire.read()` never drains the buffer). The harness
-  supports multi-byte writes because a future firmware may use them.
+- **I2C register interface (dev sketch, D-22):** the protocol is specified in
+  `docs/i2c-protocol.md`, and its constants are in `docs/magicpanel_i2c.h`. Byte 0 with bit 7
+  set addresses a register. A lone byte 0–39 is still a legacy command while `CONFIG.LEGACY` is
+  set (EEPROM, default on). Multi-byte writes no longer deafen the receiver (the specimen's
+  `Wire.read()` never drained the buffer). The register tests are
+  `tests/test_i2c_protocol.py`: they read the header and the spec's catalogue table. If you
+  change a sequence's timing, run `tools/measure_lengths.py --write`. Any protocol change updates
+  the spec, the header and the tests together.
 - Command 2 falls through into command 3; `allOFF;` (no parentheses) in `allONTimed` is a
   no-op, so commands 1–4 leave the panel on; `FadeOutIn` writes 64 bytes past `VMagicPanel`
   in the specimen (contained by a spill area in the dev sketch, D-21). These are baselined as-is;

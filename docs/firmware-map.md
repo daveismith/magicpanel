@@ -215,6 +215,10 @@ Consequences:
 
 ### 3.3 Byte protocol
 
+> **Dev sketch differs (D-22):** `MagicPanel.ino` implements the register interface in
+> `docs/i2c-protocol.md`. It drains every write, so nothing below about deafening applies.
+> Legacy one-byte commands keep the table in 3.4.
+
 - Only the **first byte** of a write is used: `int i2cEvent = Wire.read();` (L1829).
   `floor(i2cEvent/1)` (L1830) is integer division by 1, a no-op.
 - Address-only write (0 data bytes): `Wire.read()` returns −1, no case matches, no visible
