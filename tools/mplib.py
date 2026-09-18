@@ -53,6 +53,9 @@ I2C_COMMANDS = {
     39: ("RandomPixel(40)", 6000),
 }
 SLAVE_ADDR = 0x14
+# Protocol v1 register names for scenario markers (docs/magicpanel_i2c.h is authoritative)
+I2C_REGISTERS = {0x10: "STATUS", 0x20: "START", 0x21: "STOP", 0x22: "BRIGHTNESS", 0x30: "CONFIG",
+                 0x31: "DEFAULT_BRIGHTNESS", 0x3F: "SAVE", 0x40: "INFO_INDEX"}
 
 # Jumper / rotary modes, firmware-map section 4.1. pins that must be LOW -> (name, nominal ms)
 JUMPER_MODES = {
@@ -136,7 +139,10 @@ def scenario_to_script(sc: Scenario) -> str:
             w = step["i2c_write"]; addr = int(w["addr"]); data = [int(b) & 0xFF for b in w.get("bytes", [])]
             label = step.get("label")
             if label is None:
-                if addr == SLAVE_ADDR and data:
+                if addr == SLAVE_ADDR and data and data[0] & 0x80:
+                    reg = data[0] & 0x7F
+                    label = f"reg 0x{reg:02x} {I2C_REGISTERS.get(reg, 'register')}" + (f" {data[1:]}" if len(data) > 1 else " (pointer)")
+                elif addr == SLAVE_ADDR and data:
                     label = f"cmd {data[0]} {I2C_COMMANDS.get(data[0], ('unknown command',))[0]}"
                     if len(data) > 1:
                         label += f" (+{len(data) - 1} extra bytes)"
@@ -146,6 +152,11 @@ def scenario_to_script(sc: Scenario) -> str:
                     label = f"write to foreign address 0x{addr:02x}"
             lines.append(f"at_cycle {cyc} marker {label}")
             lines.append(f"at_cycle {cyc} i2c_write 0x{addr:02x} " + " ".join(str(b) for b in data))
+        elif "i2c_write_read" in step:
+            r = step["i2c_write_read"]; data = [int(b) & 0xFF for b in r.get("bytes", [])]
+            n = int(r.get("n", 1))
+            lines.append(f"at_cycle {cyc} marker {step.get('label', f'write {data} then read {n} bytes')}")
+            lines.append(f"at_cycle {cyc} i2c_write_read 0x{int(r['addr']):02x} {n} " + " ".join(str(b) for b in data))
         elif "i2c_read" in step:
             r = step["i2c_read"]
             lines.append(f"at_cycle {cyc} marker {step.get('label', f'read {int(r.get('n', 1))} bytes from 0x{int(r['addr']):02x}')}")
@@ -182,6 +193,51 @@ def run_mpsim(elf: Path, out: Path, script: str | None, run_ms: int | None = Non
         cmd.append("--no-vcd")
     cmd += extra or []
     return subprocess.run(cmd, capture_output=True, text=True)
+
+
+class InteractiveSim:
+    """mpsim --interactive from reset: one JSON line per command (see harness/README.md)."""
+
+    def __init__(self, elf: Path, out: Path, eeprom: Path | None = None, eeprom_out: Path | None = None):
+        if not HARNESS_BIN.exists():
+            raise SystemExit("harness/mpsim not built: run `make harness`")
+        out.mkdir(parents=True, exist_ok=True)
+        cmd = [str(HARNESS_BIN), "--elf", str(elf), "--out", str(out), "--interactive", "--quiet", "--no-vcd"]
+        if eeprom:
+            cmd += ["--eeprom", str(eeprom)]
+        if eeprom_out:
+            cmd += ["--eeprom-out", str(eeprom_out)]
+        self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
+        if not self._read().get("ready"):
+            raise RuntimeError("mpsim did not start")
+
+    def _read(self) -> dict:
+        line = self.proc.stdout.readline()
+        if not line:
+            raise RuntimeError("mpsim exited")
+        return json.loads(line)
+
+    def cmd(self, line: str) -> dict:
+        self.proc.stdin.write(line + "\n"); self.proc.stdin.flush()
+        r = self._read()
+        if not r.get("ok"):
+            raise RuntimeError(f"{line}: {r}")
+        return r
+
+    def step(self, ms: float) -> None:
+        if ms < 0:
+            raise ValueError(f"cannot step {ms} ms")
+        self.cmd(f"step_cycles {int(ms * CYCLES_PER_MS)}")
+
+    def close(self) -> None:
+        if self.proc.poll() is not None:
+            return
+        try:
+            self.proc.stdin.write("quit\n"); self.proc.stdin.close()
+            self.proc.wait(timeout=30)
+        except Exception:
+            self.proc.kill()
+        self.proc.stdout.close()
 
 
 def read_jsonl(p: Path) -> list[dict]:

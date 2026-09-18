@@ -246,18 +246,27 @@ def sim_step(session_id: str, ms: float | None = None, cycles: int | None = None
 def sim_i2c_write(session_id: str, addr: int = 0x14, bytes: list[int] = []) -> dict[str, Any]:
     """Act as I2C master: write bytes to a 7-bit address (default 0x14, the panel). The
     simulation runs until the transaction completes. Returns ack (address matched) and the
-    number of bytes acknowledged. Note: the firmware executes the command inside the TWI ISR;
-    step afterwards to let the animation play."""
+    number of bytes acknowledged. The firmware acts on it from loop() within ~8 ms; step
+    afterwards to let the animation play. Register protocol: docs/i2c-protocol.md."""
     s = _session(session_id)
     return s.cmd(f"i2c_write 0x{addr & 0x7F:02x} " + " ".join(str(int(b) & 0xFF) for b in bytes))
 
 
 @server.tool()
 def sim_i2c_read(session_id: str, addr: int = 0x14, n: int = 1) -> dict[str, Any]:
-    """Act as I2C master: read n bytes from a 7-bit address. Today's firmware has no onRequest
-    handler and answers a single 0x00 (remaining bytes read as 0xFF)."""
+    """Act as I2C master: read n bytes from a 7-bit address, starting at the register pointer
+    set by the previous write (docs/i2c-protocol.md)."""
     s = _session(session_id)
     return s.cmd(f"i2c_read 0x{addr & 0x7F:02x} {int(n)}")
+
+
+@server.tool()
+def sim_i2c_write_read(session_id: str, addr: int = 0x14, bytes: list[int] = [], n: int = 1) -> dict[str, Any]:
+    """Act as I2C master: write bytes, then read n bytes, with nothing in between (the
+    set-register-pointer-then-read pattern, e.g. bytes=[0x90], n=16 reads the status block).
+    Returns the bytes read."""
+    s = _session(session_id)
+    return s.cmd(f"i2c_write_read 0x{addr & 0x7F:02x} {int(n)} " + " ".join(str(int(b) & 0xFF) for b in bytes))
 
 
 @server.tool()

@@ -1,7 +1,7 @@
 /* mpsim — deterministic simavr harness for the Magic Panel firmware.
  *
  *   mpsim --elf FW.elf --out RUNDIR [--script FILE | --run-cycles N | --run-ms N]
- *         [--eeprom FILE] [--no-vcd] [--interactive] [--quiet]
+ *         [--eeprom FILE] [--eeprom-out FILE] [--no-vcd] [--interactive] [--quiet]
  *
  * Batch mode executes a line-oriented stimulus script (see parse_script) for a fixed cycle
  * budget. Interactive mode reads the same actions plus step_cycles, step_ms, display, quit from stdin and
@@ -32,8 +32,9 @@
 
 typedef struct step {
     avr_cycle_count_t cycle;
-    enum { STEP_I2C_WRITE, STEP_I2C_READ, STEP_GPIO_SET, STEP_GPIO_RELEASE, STEP_MARKER } kind;
+    enum { STEP_I2C_WRITE, STEP_I2C_READ, STEP_I2C_WRITE_READ, STEP_GPIO_SET, STEP_GPIO_RELEASE, STEP_MARKER } kind;
     uint8_t addr; uint8_t data[I2C_MAX_BYTES]; int n;
+    int rn;                       /* STEP_I2C_WRITE_READ: bytes to read after writing data[0..n) */
     char port; int pin; int value;
     char text[128];
     int line;
@@ -221,6 +222,13 @@ static void run_step(sim_t *s, step_t *st) {
     case STEP_I2C_READ: {
         int id = i2c_master_queue(&s->i2c, st->addr, 1, NULL, st->n);
         event(s, "i2c_queued", "id=%d read addr=0x%02x n=%d", id, st->addr, st->n); break; }
+    case STEP_I2C_WRITE_READ: {
+        /* Write then read, queued back to back so nothing else runs in between. At simavr's
+         * message level a repeated START and STOP+START give the slave the same status
+         * sequence (0xA0 then 0xA8), as they do on real hardware (decision D-22). */
+        int wid = i2c_master_queue(&s->i2c, st->addr, 0, st->data, st->n);
+        int rid = i2c_master_queue(&s->i2c, st->addr, 1, NULL, st->rn);
+        event(s, "i2c_queued", "id=%d write addr=0x%02x n=%d, id=%d read n=%d", wid, st->addr, st->n, rid, st->rn); break; }
     case STEP_GPIO_SET: do_gpio_set(s, st->port, st->pin, st->value); break;
     case STEP_GPIO_RELEASE: do_gpio_release(s, st->port, st->pin); break;
     case STEP_MARKER: event(s, "marker", "%s", st->text); break;
@@ -235,22 +243,24 @@ static long parse_num(const char *t, int *ok) {
     char *e; long v = strtol(t, &e, 0); *ok = (e != t && *e == 0); return v;
 }
 
-/* Parse one action ("i2c_write 0x14 20 ...", "i2c_read 0x14 2", "gpio_set B3 0", "marker text")
- * into st; returns 0 on success, else an error string. */
+/* Parse one action ("i2c_write 0x14 20 ...", "i2c_read 0x14 2", "i2c_write_read 0x14 16 144",
+ * "gpio_set B3 0", "marker text") into st; returns 0 on success, else an error string. */
 static const char *parse_action(char *line, step_t *st) {
     char *save = NULL; char *tok = strtok_r(line, " \t\r\n", &save);
     if (!tok) return "empty action";
     int ok;
-    if (!strcmp(tok, "i2c_write") || !strcmp(tok, "i2c_read")) {
-        st->kind = tok[4] == 'w' ? STEP_I2C_WRITE : STEP_I2C_READ;
+    if (!strcmp(tok, "i2c_write") || !strcmp(tok, "i2c_read") || !strcmp(tok, "i2c_write_read")) {
+        st->kind = !strcmp(tok, "i2c_write_read") ? STEP_I2C_WRITE_READ : tok[4] == 'w' ? STEP_I2C_WRITE : STEP_I2C_READ;
         tok = strtok_r(NULL, " \t\r\n", &save); if (!tok) return "missing address";
         long a = parse_num(tok, &ok); if (!ok || a < 0 || a > 0x7F) return "bad address";
         st->addr = (uint8_t)a; st->n = 0;
-        if (st->kind == STEP_I2C_READ) {
+        if (st->kind != STEP_I2C_WRITE) {
             tok = strtok_r(NULL, " \t\r\n", &save); if (!tok) return "missing read length";
             long n = parse_num(tok, &ok); if (!ok || n < 0 || n > I2C_MAX_BYTES) return "bad read length";
-            st->n = (int)n;
-        } else {
+            if (st->kind == STEP_I2C_READ) { st->n = (int)n; return NULL; }
+            st->rn = (int)n;
+        }
+        {
             while ((tok = strtok_r(NULL, " \t\r\n", &save))) {
                 long b = parse_num(tok, &ok); if (!ok || b < 0 || b > 255) return "bad data byte";
                 if (st->n >= I2C_MAX_BYTES) return "too many bytes";
@@ -396,11 +406,14 @@ static void interactive(sim_t *s) {
         if (err) { fprintf(out, "{\"ok\":false,\"error\":"); json_str(out, err); fputs("}\n", out); continue; }
         st.cycle = s->avr->cycle;
         run_step(s, &st);
-        if (st.kind == STEP_I2C_WRITE || st.kind == STEP_I2C_READ) {
-            /* run until the transaction completes (bounded) so the caller gets ack/data */
+        if (st.kind == STEP_I2C_WRITE || st.kind == STEP_I2C_READ || st.kind == STEP_I2C_WRITE_READ) {
+            /* run until the transaction completes (bounded) so the caller gets ack/data; for a
+             * write-read that is the read, which is queued last */
             avr_cycle_count_t limit = s->avr->cycle + MS_TO_CYCLES(200);
+            unsigned long want = s->i2c.completed + (st.kind == STEP_I2C_WRITE_READ ? 2 : 1);
             s->have_last_txn = 0;
-            while (!s->have_last_txn && !s->stopped && s->avr->cycle < limit) run_until(s, s->avr->cycle + 1000);
+            while ((!s->have_last_txn || s->i2c.completed < want) && !s->stopped && s->avr->cycle < limit)
+                run_until(s, s->avr->cycle + 1000);
             flush_all(s);
             if (!s->have_last_txn) { fprintf(out, "{\"ok\":false,\"error\":\"transaction did not complete within 200 ms\",\"cycle\":%llu}\n", (unsigned long long)s->avr->cycle); continue; }
             i2c_txn_t *t = &s->last_txn;
@@ -420,18 +433,19 @@ static void interactive(sim_t *s) {
 /* ------------------------------------------------------------------ main */
 static void usage(void) {
     fputs("usage: mpsim --elf FW.elf --out DIR [--script FILE] [--run-cycles N | --run-ms N]\n"
-          "             [--eeprom FILE] [--no-vcd] [--interactive] [--quiet]\n", stderr);
+          "             [--eeprom FILE] [--eeprom-out FILE] [--no-vcd] [--interactive] [--quiet]\n", stderr);
     exit(1);
 }
 
 int main(int argc, char **argv) {
     static sim_t s; G = &s;
-    int vcd = 1; avr_cycle_count_t run_cycles = 0;
+    int vcd = 1; avr_cycle_count_t run_cycles = 0; const char *eeprom_out = NULL;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--elf") && i + 1 < argc) s.elf_path = argv[++i];
         else if (!strcmp(argv[i], "--out") && i + 1 < argc) snprintf(s.outdir, sizeof s.outdir, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--script") && i + 1 < argc) s.script_path = argv[++i];
         else if (!strcmp(argv[i], "--eeprom") && i + 1 < argc) s.eeprom_path = argv[++i];
+        else if (!strcmp(argv[i], "--eeprom-out") && i + 1 < argc) eeprom_out = argv[++i];
         else if (!strcmp(argv[i], "--run-cycles") && i + 1 < argc) run_cycles = strtoull(argv[++i], NULL, 0);
         else if (!strcmp(argv[i], "--run-ms") && i + 1 < argc) run_cycles = MS_TO_CYCLES(strtoull(argv[++i], NULL, 0));
         else if (!strcmp(argv[i], "--no-vcd")) vcd = 0;
@@ -514,6 +528,12 @@ int main(int argc, char **argv) {
     event(&s, "end", "cycle %llu", (unsigned long long)s.avr->cycle);
     flush_all(&s);
     write_summary(&s, s.stopped ? s.stop_reason : "ok");
+    if (eeprom_out) {                              /* final EEPROM contents, 1024 bytes */
+        avr_eeprom_desc_t d = { .ee = NULL, .offset = 0, .size = 1024 };
+        avr_ioctl(s.avr, AVR_IOCTL_EEPROM_GET, &d);
+        FILE *f = fopen(eeprom_out, "wb"); if (!f) { perror(eeprom_out); return 2; }
+        fwrite(d.ee, 1, d.size, f); fclose(f);
+    }
     if (s.vcd_on) vcd_close(&s.vcd, s.avr->cycle);
     fclose(s.f_frames); fclose(s.f_display); fclose(s.f_i2c); fclose(s.f_gpio); fclose(s.f_events); fclose(s.f_film);
     return s.stopped ? 3 : 0;
