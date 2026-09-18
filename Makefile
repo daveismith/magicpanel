@@ -43,16 +43,16 @@ rebaseline: harness ## replace ONE baseline deliberately: make rebaseline SCENAR
 	$(PY) tools/baseline.py capture $(SCENARIO) --i-mean-it
 
 test: firmware harness ## full regression: all scenarios vs baselines, determinism, mutation self-test
-	$(PY) -m unittest discover -s tests -p 'test_*.py' -v
+	cd tests && ../$(PY) -m unittest -v test_regression test_determinism test_mutants test_mcp
 
 test-fast: harness ## regression only (assumes build/firmware.elf exists)
-	$(PY) -m unittest tests.test_regression -v
+	cd tests && ../$(PY) -m unittest -v test_regression
 
 determinism: harness ## run the suite twice and require byte-identical display.jsonl
-	$(PY) -m unittest tests.test_determinism -v
+	cd tests && ../$(PY) -m unittest -v test_determinism
 
 mutants: harness  ## mutation self-test: every mutant must be detected
-	$(PY) -m unittest tests.test_mutants -v
+	cd tests && ../$(PY) -m unittest -v test_mutants
 
 spikes:           ## Phase 1 spikes against the precompiled ELF
 	$(MAKE) -C spikes run

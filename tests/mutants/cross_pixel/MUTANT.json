@@ -1,0 +1,16 @@
+{
+  "name": "cross_pixel",
+  "description": "One pixel changed in the Cross pattern: row 3 B00011000 -> B00111000",
+  "fails": [
+    "cmd_20_cross"
+  ],
+  "report_contains": {
+    "cmd_20_cross": [
+      "cmd 20 Cross",
+      "content differs"
+    ]
+  },
+  "passes": [
+    "cmd_33_symbol"
+  ]
+}

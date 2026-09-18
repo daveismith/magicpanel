@@ -1,0 +1,144 @@
+name: firmware-regression
+
+on:
+  push:
+    paths:
+      - "MagicPanel_v010_5.ino"
+      - "harness/**"
+      - "scenarios/**"
+      - "tests/**"
+      - "tools/**"
+      - "mcp/**"
+      - "third_party/**"
+      - ".gitmodules"
+      - "requirements.txt"
+      - "Makefile"
+      - ".github/workflows/firmware-regression.yml"
+  pull_request:
+    paths:
+      - "MagicPanel_v010_5.ino"
+      - "harness/**"
+      - "scenarios/**"
+      - "tests/**"
+      - "tools/**"
+      - "mcp/**"
+      - "third_party/**"
+      - ".gitmodules"
+      - "requirements.txt"
+      - "Makefile"
+      - ".github/workflows/firmware-regression.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  regression:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Host packages (libelf for simavr)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libelf-dev pkg-config build-essential
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Read pinned versions
+        id: pins
+        run: |
+          set -a; source tools/versions.env; set +a
+          echo "cli=$ARDUINO_CLI_VERSION" >> "$GITHUB_OUTPUT"
+          echo "core=$AVR_CORE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "simavr=$SIMAVR_SHA" >> "$GITHUB_OUTPUT"
+
+      # --- caches: arduino-cli binary + AVR core/toolchain, built libsimavr, python venv -----
+      - name: Cache arduino toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            tools/bin
+            tools/arduino-data
+          key: arduino-${{ runner.os }}-cli${{ steps.pins.outputs.cli }}-core${{ steps.pins.outputs.core }}-v1
+
+      - name: Cache libsimavr
+        uses: actions/cache@v4
+        with:
+          path: third_party/simavr/simavr/obj-*
+          key: simavr-${{ runner.os }}-${{ steps.pins.outputs.simavr }}-v1
+
+      - name: Cache python venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py3.12-${{ hashFiles('requirements.txt') }}
+
+      # --- setup (network only here) ----------------------------------------------------------
+      - name: Setup (pinned arduino-cli, AVR core, libsimavr, venv)
+        run: make setup
+
+      # --- everything below runs without network ----------------------------------------------
+      - name: Build firmware (twice; must be deterministic and match the specimen ELF)
+        run: make firmware
+
+      - name: Build harness
+        run: make harness
+
+      - name: Run all scenarios and compare to baselines
+        run: cd tests && ../.venv/bin/python -m unittest -v test_regression
+
+      - name: Determinism check (full suite twice, byte-identical)
+        run: cd tests && ../.venv/bin/python -m unittest -v test_determinism
+
+      - name: Mutation self-test (every mutant must be detected)
+        run: cd tests && ../.venv/bin/python -m unittest -v test_mutants
+
+      - name: MCP server acceptance
+        run: cd tests && ../.venv/bin/python -m unittest -v test_mcp
+
+      # --- failure diagnostics -----------------------------------------------------------------
+      - name: Collect diff reports
+        if: failure()
+        run: |
+          {
+            echo "## Firmware regression: FAILED"
+            echo
+            for f in $(find runs -name diff_report.md | sort); do
+              if grep -q '^\*\*FAIL\*\*' "$f"; then
+                echo "<details><summary>$f</summary>"; echo; echo '```'; head -c 6000 "$f"; echo '```'; echo "</details>"; echo
+              fi
+            done
+          } > pr-comment.md
+          head -c 200 pr-comment.md
+
+      - name: Upload run artefacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runs-${{ github.run_id }}
+          path: |
+            runs/**/diff_report.md
+            runs/**/filmstrip.txt
+            runs/**/display.jsonl
+            runs/**/frames.jsonl
+            runs/**/i2c.jsonl
+            runs/**/events.jsonl
+            runs/**/trace.vcd
+            build/metadata.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Post diff report as PR comment
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.existsSync('pr-comment.md') ? fs.readFileSync('pr-comment.md', 'utf8') : 'Regression failed; see workflow artefacts.';
+            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, body: body.slice(0, 60000) });
