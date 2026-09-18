@@ -2,3 +2,6 @@
 	path = third_party/simavr
 	url = https://github.com/buserror/simavr.git
 	ignore = untracked
+[submodule "third_party/LedControl"]
+	path = third_party/LedControl
+	url = https://github.com/wayoda/LedControl.git
