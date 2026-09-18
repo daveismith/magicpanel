@@ -1,6 +1,8 @@
 // Magic Panel FX by IA-PARTS.com 
 //
 //// Release History
+// v011.0 - I2C register interface (docs/i2c-protocol.md): start/stop/status/catalogue/brightness,
+//          legacy one-byte commands kept; every animation runs from loop()
 // v010.5 - Re-added Working I2C and additional display sequences  (FlthyMcNsty 05-21-2014)
 // v010 - Remove I2C code and clean up
 // v009 - Combine Big Happy Dude functions to v008 + allow for 3 pin binary input
@@ -21,6 +23,7 @@
 #endif
 #include "LedControl.h"
 #include "Wire.h"
+#include <avr/eeprom.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////  Assign IC2 Address Below   //////////////////////////////////////////////////////////////////////////
@@ -79,10 +82,56 @@ boolean VMagicPanel[16][8];  // [Row][Col]; only rows 0-7 are displayed. Rows 8-
 unsigned char MagicPanel[16];
 int NumLoops=2;
 
+// Register interface (docs/i2c-protocol.md; values mirror docs/magicpanel_i2c.h)
+#define PROTO_MAJOR 1
+#define PROTO_MINOR 0
+#define FW_MAJOR    0
+#define FW_MINOR    11
+#define FW_PATCH    0
+#define CAPS        0x1F          // legacy, repeat, brightness, names, EEPROM config
+#define REG_BIT     0x80
+#define MAX_WRITE_DATA 8
+#define REG_STATUS             0x10
+#define REG_START              0x20
+#define REG_STOP               0x21
+#define REG_BRIGHTNESS         0x22
+#define REG_CONFIG             0x30
+#define REG_DEFAULT_BRIGHTNESS 0x31
+#define REG_SAVE               0x3F
+#define REG_INFO_INDEX         0x40
+#define CFG_LEGACY       0x01
+#define CFG_GPIO_ENABLE  0x02
+#define CFG_GPIO_RESUME  0x04
+#define CFG_VALID        0x07
+#define CFG_DEFAULT      0x07
+#define SAVE_MAGIC       0xA5
+#define FACTORY_MAGIC    0x5A
+#define EE_MAGIC         'M'
+#define EE_LAYOUT        1
+enum { ERR_NONE, ERR_UNKNOWN_REG, ERR_READ_ONLY, ERR_BAD_LENGTH, ERR_BAD_VALUE, ERR_LEGACY_OFF, ERR_BAD_MAGIC };
+enum { ACT_NONE, ACT_START, ACT_STOP_BLANK, ACT_STOP_FREEZE };
+
+volatile byte regPtr = 0;         // register pointer for reads
+volatile byte infoIndex = 0;      // INFO_INDEX
+volatile byte lastError = ERR_NONE;
+volatile byte errorCount = 0;
+volatile byte cfgConfig = CFG_DEFAULT;
+volatile byte cfgDefaultBrightness = 15;
+byte cfgApplied = CFG_DEFAULT;    // CONFIG as consumeI2C last saw it
+volatile byte brightness = 15;
+// Actions posted by receiveEvent(); a later start/stop replaces an earlier one not yet carried out.
+volatile byte pendAction = ACT_NONE;
+volatile byte pendSeq, pendRepeat, pendEnd, pendSource;
+volatile bool pendBrightness = false;
+volatile byte pendSave = 0;
+
 void setup()
 {
+  loadConfig();                            // CONFIG and DEFAULT_BRIGHTNESS from EEPROM (factory values if blank)
+  brightness = cfgDefaultBrightness;
   Wire.begin(I2CAdress);                   // Start I2C Bus as Slave at I2C Address
   Wire.onReceive(receiveEvent);            // register event so when we receive something we jump to receiveEvent();
+  Wire.onRequest(requestEvent);            // register reads (docs/i2c-protocol.md)
   /*
    The MAX72XX is in power-saving mode on startup,
    we have to do a wakeup call
@@ -90,8 +139,8 @@ void setup()
   lc.shutdown(0,false);
   lc.shutdown(1,false);
   /* Set the brightness to a medium values */
-  lc.setIntensity(0,15);
-  lc.setIntensity(1,15);
+  lc.setIntensity(0,brightness);
+  lc.setIntensity(1,brightness);
 
   /* and clear the display */
   lc.clearDisplay(0);
@@ -129,10 +178,11 @@ void setup()
 // Coroutine rule: no local variable may be live across a yield. Loop counters that span a
 // PAT_DELAY live in `sq`; loops without a yield inside may use ordinary locals.
 //
-// Triggers: an I2C write (receiveEvent only records it) or a debounced change of the rotary/jumper
-// code abandons the running sequence at its next yield and starts the new one; the same trigger
-// restarts it. GPIO modes loop until the next trigger; an I2C sequence that ends while a GPIO
-// mode is selected resumes that mode from its start.
+// Triggers: an I2C start (receiveEvent only validates and posts it) or a debounced change of the
+// rotary/jumper code abandons the running sequence at its next yield and starts the new one; the
+// same trigger restarts it. GPIO modes loop until the next trigger; an I2C sequence that ends while
+// a GPIO mode is selected resumes that mode from its start. The I2C register interface is
+// specified in docs/i2c-protocol.md; its constants mirror docs/magicpanel_i2c.h.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define CO_CAT2(a, b) a##b
@@ -278,17 +328,104 @@ const SeqEntry GPIO_TABLE[10] PROGMEM = {
   { 0,                P_NONE,        0,     0 },  // 9 Random(random(8000,14000))
 };
 
+#define SEQ_COUNT        42
+#define SEQ_RANDOM_SHOW  40       // Random() with the short off interval (GPIO modes 6 and 9)
+#define SEQ_RANDOM_LONG  41       // Random() with the long off interval (GPIO mode 7)
+#define SEQ_NONE         0xFF
+#define SUB_SEQ_OFF      0xFE
+
+// Catalogue: what an I2C controller reads through INFO_INDEX. Layout = INFO_FLAGS, INFO_LENGTH_MS
+// (little-endian, as AVR stores it), INFO_NAME; 21 bytes, no padding on AVR.
+#define INFO_LOOPS    0x01
+#define INFO_RANDOM   0x02
+#define INFO_ENDS_LIT 0x04
+#define INFO_HOLD     0x08
+#define LEN_INDEFINITE 0xFFFFFFFFUL
+struct SeqInfo { byte flags; unsigned long lengthMs; char name[16]; };
+const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
+  { 0,                          7,       "All off" },
+  { INFO_ENDS_LIT | INFO_HOLD,  1000015, "On 1000s" },
+  { INFO_ENDS_LIT | INFO_HOLD,  7031,    "On 2s+5s" },
+  { INFO_ENDS_LIT | INFO_HOLD,  5015,    "On 5s" },
+  { INFO_ENDS_LIT | INFO_HOLD,  10016,   "On 10s" },
+  { 0,                          10172,   "Toggle" },
+  { 0,                          4569,    "Alert" },
+  { 0,                          11398,   "Alert long" },
+  { 0,                          8359,    "Trace up" },
+  { 0,                          8668,    "Trace up line" },
+  { 0,                          8359,    "Trace down" },
+  { 0,                          8668,    "Trace down line" },
+  { 0,                          8365,    "Trace right" },
+  { 0,                          8365,    "Trace right line" },
+  { 0,                          8365,    "Trace left" },
+  { 0,                          8365,    "Trace left line" },
+  { 0,                          5213,    "Expand" },
+  { 0,                          5213,    "Expand ring" },
+  { 0,                          5213,    "Compress" },
+  { 0,                          5213,    "Compress ring" },
+  { INFO_HOLD,                  3024,    "Cross" },
+  { 0,                          4150,    "Cylon column" },
+  { 0,                          4150,    "Cylon row" },
+  { 0,                          3885,    "Eye scan" },
+  { INFO_RANDOM,                4541,    "Fade out/in" },
+  { INFO_RANDOM,                2274,    "Fade out" },
+  { 0,                          3334,    "Flash all" },
+  { 0,                          3337,    "Flash halves" },
+  { 0,                          3337,    "Flash quadrants" },
+  { 0,                          5122,    "Two loop" },
+  { 0,                          5122,    "One loop" },
+  { 0,                          4837,    "Test fill" },
+  { 0,                          2427,    "Test pixel" },
+  { INFO_HOLD,                  3024,    "Symbol AI" },
+  { INFO_HOLD,                  4047,    "Symbol 2GWD" },
+  { 0,                          4247,    "Quadrant 1" },
+  { 0,                          4247,    "Quadrant 2" },
+  { 0,                          4323,    "Quadrant 3" },
+  { 0,                          4323,    "Quadrant 4" },
+  { INFO_RANDOM,                6636,    "Random pixel" },
+  { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show" },
+  { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show long" },
+};
+
+// Rotary/jumper code -> catalogue ID reported in the status block.
+const byte GPIO_SEQ[10] PROGMEM = { SEQ_NONE, 24, 26, 29, 10, 32, SEQ_RANDOM_SHOW, SEQ_RANDOM_LONG, 1, SEQ_RANDOM_SHOW };
+
+// RANDOM_TABLE index -> catalogue ID of the pattern the random show is playing (SUB_SEQ). Mode 1
+// draws nothing; mode 2 (on 2 s) reports "On 2s+5s", whose first 2 s it is.
+const byte RANDOM_SEQ[36] PROGMEM = {
+  0, SUB_SEQ_OFF, 2, 5, 6, 8, 9, 10, 11, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+  25, 26, 27, 28, 29, 30, 31, 32, 33, 35, 36, 37, 38, 39, 12, 13, 14, 15
+};
+
 enum { PROG_NONE, PROG_I2C, PROG_GPIO };
 byte progKind = PROG_NONE;
-byte progCode = 0;
+byte progCode = 0;                // I2C: catalogue ID; GPIO: rotary/jumper code
+bool progRandom = false;          // the program is a Random() show
+bool progRandomLong = false;      // ... with the long off interval
 SeqEntry progEntry;               // entry of the running program (or of the Random() mode)
+
+// Status of the current (or most recent) run, as the status registers report it. Written by the
+// main loop with interrupts off, read by requestEvent() in the TWI interrupt.
+enum { SRC_NONE, SRC_I2C, SRC_LEGACY, SRC_GPIO, SRC_GPIO_RESUME };
+enum { ST_IDLE, ST_RUNNING, ST_COMPLETE, ST_STOPPED };
+#define END_DEFAULT 0
+#define END_BLANK   1
+byte runSeq = SEQ_NONE;
+byte runSource = SRC_NONE;
+byte runState = ST_IDLE;
+byte runRepeat = 1;               // 0 = forever
+byte runEnd = END_DEFAULT;
+byte runIteration = 0;            // completed iterations, saturating at 255
+byte runCounter = 0;
+unsigned long runStartMs = 0;
+unsigned long runEndMs = 0;
+unsigned long iterStartMs = 0;
 
 byte gpioCode = 0;                // accepted rotary/jumper code (0 = no GPIO mode)
 #define DEBOUNCE_MS 20            // a new rotary/jumper code must be stable this long to count
 byte gpioCandidate = 0;           // code currently being debounced
 unsigned long gpioCandidateSince = 0;
 
-volatile int  i2cCmd = 0;         // last byte received over I2C (-1 for an empty write)
 volatile byte i2cCount = 0;       // writes received since loop() last looked
 
 byte patId = P_NONE;
@@ -313,8 +450,40 @@ void startProgram(byte kind, byte code) {
   progPC = 0;
   patPC = 0;
   waitKind = WAIT_NONE;
-  if (kind == PROG_I2C) memcpy_P(&progEntry, &I2C_TABLE[code], sizeof(SeqEntry));
-  else                  memcpy_P(&progEntry, &GPIO_TABLE[code], sizeof(SeqEntry));
+  if (kind == PROG_I2C) {
+    progRandom = code >= SEQ_RANDOM_SHOW;
+    progRandomLong = code == SEQ_RANDOM_LONG;
+    if (!progRandom) memcpy_P(&progEntry, &I2C_TABLE[code], sizeof(SeqEntry));
+  } else {
+    progRandom = isRandomMode(code);
+    progRandomLong = code == 7;
+    memcpy_P(&progEntry, &GPIO_TABLE[code], sizeof(SeqEntry));
+  }
+}
+
+void beginRun(byte seq, byte source, byte repeat, byte end) {
+  noInterrupts();
+  runSeq = seq; runSource = source; runRepeat = repeat; runEnd = end;
+  runIteration = 0;
+  runState = ST_RUNNING;
+  runStartMs = iterStartMs = millis();
+  runCounter++;
+  interrupts();
+}
+
+void endRun(byte state) {
+  if (runState != ST_RUNNING) return;
+  noInterrupts();
+  runState = state;
+  runEndMs = millis();
+  interrupts();
+}
+
+void nextIteration() {
+  noInterrupts();
+  if (runIteration < 255) runIteration++;
+  iterStartMs = millis();
+  interrupts();
 }
 
 void stopProgram() {
@@ -329,6 +498,7 @@ void stopProgram() {
 // continue in their off state with a fresh count, as the original's receiveEvent reset RandomTime.
 void startGpio(byte code, bool resume) {
   startProgram(PROG_GPIO, code);
+  beginRun(pgm_read_byte(&GPIO_SEQ[code]), resume ? SRC_GPIO_RESUME : SRC_GPIO, 0, END_DEFAULT);
   if (isRandomMode(code)) {
     RandomState = resume ? 2 : 0;
     RandomTime = 0;
@@ -356,23 +526,29 @@ bool runPattern();
 
 bool runProgram() {
   CO_BEGIN(progPC);
-  if (progKind == PROG_I2C) {
-    PROG_RUN_ENTRY();
-    if (progCode == 2) {                    // case 2 has no break: falls into case 3
-      RandomTime = RandomOnTime + 1;
-      startPattern(P_ALLONTIMED, 5000, 0);
-      while (runPattern()) CO_YIELD(progPC);
+  if (progKind == PROG_I2C && !progRandom) {
+    for (;;) {                              // one iteration per pass; repeat 0 = forever
+      PROG_RUN_ENTRY();
+      if (progCode == 2) {                  // case 2 has no break: falls into case 3
+        RandomTime = RandomOnTime + 1;
+        startPattern(P_ALLONTIMED, 5000, 0);
+        while (runPattern()) CO_YIELD(progPC);
+      }
+      if (progEntry.flags & SQ_RT) RandomTime = RandomOnTime + 1;
+      if (progEntry.flags & SQ_POST) allOFF();
+      nextIteration();
+      if (runRepeat != 0 && runIteration >= runRepeat) break;
+      CO_YIELD(progPC);                     // let loop() run between iterations (All off never yields)
     }
-    if (progEntry.flags & SQ_RT) RandomTime = RandomOnTime + 1;
-    if (progEntry.flags & SQ_POST) allOFF();
+    if (runEnd == END_BLANK) allOFF();
     CO_END(progPC);
   }
 
-  if (isRandomMode(progCode)) {
+  if (progRandom) {
     // Port of Random(int RandomInterval): one state step per Speed-gated loop pass, exactly as
     // loop() called it once per pass. The argument is drawn every pass, and truncated to int.
     for (;;) {
-      RandomInterval = (progCode == 7) ? random(40000, 60000) : random(8000, 14000);
+      RandomInterval = progRandomLong ? random(40000, 60000) : random(8000, 14000);
       switch (RandomState) {
         case 0:
           RandomMode = random(0, 35);
@@ -388,6 +564,7 @@ bool runProgram() {
           if (RandomTime++ > RandomOnTime) {
             RandomTime = 0;
             RandomState++;
+            nextIteration();
           }
           break;
         case 2:
@@ -405,6 +582,7 @@ bool runProgram() {
   for (;;) {                                // GPIO modes 1-5 and 8: one run per loop pass, forever
     PROG_RUN_ENTRY();
     if (progEntry.flags & SQ_POST) allOFF();
+    nextIteration();
     PROG_WAIT_PASS();
   }
 }
@@ -418,25 +596,48 @@ void stepEngine() {
   }
   waitKind = WAIT_NONE;
   if (runProgram()) return;
-  byte ended = progKind;
-  progKind = PROG_NONE;
-  if (ended == PROG_I2C && gpioCode != 0) startGpio(gpioCode, true);
+  progKind = PROG_NONE;                     // only I2C programs end; GPIO modes loop
+  endRun(ST_COMPLETE);
+  if (gpioCode != 0 && (cfgConfig & CFG_GPIO_ENABLE) && (cfgConfig & CFG_GPIO_RESUME)) startGpio(gpioCode, true);
 }
 
-// I2C: take what receiveEvent recorded. Each received write consumes one random() and resets
-// RandomTime, as the original receiveEvent did; known commands (0-39) switch the sequence.
+// I2C: carry out what receiveEvent posted. Each received write consumes one random() and resets
+// RandomTime, as the original receiveEvent did; then the last start/stop request, a brightness
+// change, a configuration change and a SAVE are applied, in that order.
 void consumeI2C() {
-  if (i2cCount == 0) return;
+  if (i2cCount == 0 && !pendBrightness && pendSave == 0 && cfgConfig == cfgApplied) return;
   noInterrupts();
   byte n = i2cCount;
-  int cmd = i2cCmd;
   i2cCount = 0;
+  byte act = pendAction;
+  pendAction = ACT_NONE;
+  byte seq = pendSeq, repeat = pendRepeat, end = pendEnd, source = pendSource;
+  bool bright = pendBrightness;
+  pendBrightness = false;
+  byte save = pendSave;
+  pendSave = 0;
   interrupts();
   while (n--) {
     RandomOnTime = random(1000, 1500);
     RandomTime = 0;
   }
-  if (cmd >= 0 && cmd < 40) startProgram(PROG_I2C, cmd);
+  if (act == ACT_START) {
+    startProgram(PROG_I2C, seq);
+    beginRun(seq, source, repeat, end);
+    if (progRandom) { RandomState = 0; RandomTime = 0; }
+  } else if (act == ACT_STOP_BLANK || act == ACT_STOP_FREEZE) {
+    if (progKind != PROG_NONE) {
+      stopProgram();
+      endRun(ST_STOPPED);
+    }
+    if (act == ACT_STOP_BLANK) allOFF();
+  }
+  if (bright) {
+    lc.setIntensity(0, brightness);
+    lc.setIntensity(1, brightness);
+  }
+  applyConfig();
+  if (save) saveConfig(save);
 }
 
 byte readInputs() {
@@ -454,12 +655,16 @@ byte readInputs() {
 // GPIO mode; an I2C sequence is left to finish, and nothing resumes after it.
 void acceptGpio(byte code, bool blank) {
   gpioCode = code;
+  if (!(cfgConfig & CFG_GPIO_ENABLE)) return;   // tracked for GPIO_CODE, but starts nothing
   if (code != 0) {
     if (blank) blankPANEL();
     startGpio(code, false);
   } else if (progKind != PROG_I2C) {
     if (blank) blankPANEL();
-    stopProgram();
+    if (progKind != PROG_NONE) {
+      stopProgram();
+      endRun(ST_STOPPED);
+    }
   }
 }
 
@@ -1203,10 +1408,200 @@ void blankPANEL() {
   lc.clearDisplay(1);
 }
 
-// Runs inside the TWI interrupt: only record the command; loop() acts on it. Exactly one byte is
-// read, as in the original, so a multi-byte write still leaves the receive buffer undrained and
-// deafens the receiver until reset (firmware-map 3.3; baselined as-is).
-void receiveEvent(int eventCode) {
-  i2cCmd = Wire.read();
-  i2cCount++;
+////////////////////////////////////////////////////////////////////////////////////////////////
+// I2C register interface (docs/i2c-protocol.md). receiveEvent() and requestEvent() run in the TWI
+// interrupt: they decode, validate, move the register pointer, update INFO_INDEX, CONFIG and the
+// error registers, and post actions; consumeI2C() carries the actions out between frames.
+////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Called from consumeI2C() whenever CONFIG may have changed: re-enabling GPIO starts the selected
+// rotary/jumper mode, unless an I2C sequence is running (it resumes the mode when it ends).
+void applyConfig() {
+  byte was = cfgApplied;
+  cfgApplied = cfgConfig;
+  if (!(was & CFG_GPIO_ENABLE) && (cfgApplied & CFG_GPIO_ENABLE) && gpioCode != 0 && progKind != PROG_I2C) {
+    blankPANEL();
+    startGpio(gpioCode, false);
+  }
+}
+
+byte eeChecksum(byte cfg, byte bright) { return EE_MAGIC ^ EE_LAYOUT ^ cfg ^ bright ^ 0xA5; }
+
+void loadConfig() {
+  byte magic = eeprom_read_byte((const uint8_t*)0);
+  byte layout = eeprom_read_byte((const uint8_t*)1);
+  byte cfg = eeprom_read_byte((const uint8_t*)2);
+  byte bright = eeprom_read_byte((const uint8_t*)3);
+  byte sum = eeprom_read_byte((const uint8_t*)4);
+  if (magic == EE_MAGIC && layout == EE_LAYOUT && (cfg & ~CFG_VALID) == 0 && bright <= 15 &&
+      sum == eeChecksum(cfg, bright)) {
+    cfgConfig = cfg;
+    cfgDefaultBrightness = bright;
+  }
+  cfgApplied = cfgConfig;
+}
+
+void saveConfig(byte magic) {
+  if (magic == FACTORY_MAGIC) {
+    noInterrupts();
+    cfgConfig = CFG_DEFAULT;
+    cfgDefaultBrightness = 15;
+    interrupts();
+    applyConfig();
+  }
+  byte cfg = cfgConfig, bright = cfgDefaultBrightness;
+  eeprom_update_byte((uint8_t*)0, EE_MAGIC);
+  eeprom_update_byte((uint8_t*)1, EE_LAYOUT);
+  eeprom_update_byte((uint8_t*)2, cfg);
+  eeprom_update_byte((uint8_t*)3, bright);
+  eeprom_update_byte((uint8_t*)4, eeChecksum(cfg, bright));
+}
+
+void i2cError(byte code) {
+  lastError = code;
+  errorCount++;
+}
+
+// Validates a write of n bytes to plain registers starting at reg; returns an error code or 0.
+byte checkPlain(byte reg, const byte* d, byte n) {
+  for (byte i = 0; i < n; i++) {
+    byte r = reg + i, v = d[i];
+    switch (r) {
+      case REG_BRIGHTNESS:
+      case REG_DEFAULT_BRIGHTNESS: if (v > 15) return ERR_BAD_VALUE; break;
+      case REG_CONFIG:             if (v & ~CFG_VALID) return ERR_BAD_VALUE; break;
+      case REG_INFO_INDEX:         if (v >= SEQ_COUNT) return ERR_BAD_VALUE; break;
+      default:
+        if (r < 0x0A || (r >= REG_STATUS && r < REG_STATUS + 16) || (r > REG_INFO_INDEX && r < 0x56))
+          return ERR_READ_ONLY;
+        return ERR_UNKNOWN_REG;
+    }
+  }
+  return 0;
+}
+
+void writeRegisters(byte reg, const byte* d, byte n) {
+  byte err = 0;
+  switch (reg) {
+    case REG_START:
+      if (n > 3) { err = ERR_BAD_LENGTH; break; }
+      if (d[0] >= SEQ_COUNT || (n > 2 && d[2] > END_BLANK)) { err = ERR_BAD_VALUE; break; }
+      pendAction = ACT_START;
+      pendSeq = d[0];
+      pendRepeat = n > 1 ? d[1] : 1;
+      pendEnd = n > 2 ? d[2] : END_DEFAULT;
+      pendSource = SRC_I2C;
+      break;
+    case REG_STOP:
+      if (n != 1) { err = ERR_BAD_LENGTH; break; }
+      if (d[0] > 1) { err = ERR_BAD_VALUE; break; }
+      pendAction = d[0] ? ACT_STOP_FREEZE : ACT_STOP_BLANK;
+      break;
+    case REG_SAVE:
+      if (n != 1) { err = ERR_BAD_LENGTH; break; }
+      if (d[0] != SAVE_MAGIC && d[0] != FACTORY_MAGIC) { err = ERR_BAD_MAGIC; break; }
+      pendSave = d[0];
+      break;
+    default:
+      err = checkPlain(reg, d, n);
+      if (err) break;
+      for (byte i = 0; i < n; i++) {
+        switch ((byte)(reg + i)) {
+          case REG_BRIGHTNESS:         brightness = d[i]; pendBrightness = true; break;
+          case REG_DEFAULT_BRIGHTNESS: cfgDefaultBrightness = d[i]; break;
+          case REG_CONFIG:             cfgConfig = d[i]; break;
+          case REG_INFO_INDEX:         infoIndex = d[i]; break;
+        }
+      }
+  }
+  if (err) i2cError(err);
+}
+
+// A write: byte 0 with bit 7 set addresses a register, otherwise it is a legacy command. All bytes
+// are drained, so a long or malformed write can no longer leave the receiver deaf.
+void receiveEvent(int count) {
+  byte buf[1 + MAX_WRITE_DATA];
+  byte len = 0;
+  while (Wire.available()) {
+    byte b = Wire.read();
+    if (len < sizeof buf) buf[len] = b;
+    if (len < 255) len++;
+  }
+  i2cCount++;                              // every write advances random() once (D-16)
+  if (len == 0) return;                    // address-only probe
+  if (!(buf[0] & REG_BIT)) {
+    if (len > 1) i2cError(ERR_BAD_LENGTH);
+    else if (!(cfgConfig & CFG_LEGACY)) i2cError(ERR_LEGACY_OFF);
+    else if (buf[0] < 40) {
+      pendAction = ACT_START;
+      pendSeq = buf[0];
+      pendRepeat = 1;
+      pendEnd = END_DEFAULT;
+      pendSource = SRC_LEGACY;
+    }
+    return;
+  }
+  regPtr = buf[0] & 0x7F;
+  if (len == 1) return;                    // pointer set for a following read
+  if (len > sizeof buf) { i2cError(ERR_BAD_LENGTH); return; }
+  writeRegisters(regPtr, buf + 1, len - 1);
+}
+
+const byte IDENTITY[10] PROGMEM = { 'M', 'P', PROTO_MAJOR, PROTO_MINOR, FW_MAJOR, FW_MINOR, FW_PATCH,
+                                    SEQ_COUNT, CAPS, 0x14 };
+
+void statusBlock(byte* st) {
+  unsigned long now = millis();
+  bool running = runState == ST_RUNNING;
+  unsigned long elapsed = runState == ST_IDLE ? 0 : (running ? now : runEndMs) - runStartMs;
+  unsigned int remaining = 0;
+  if (running) {
+    unsigned long len = pgm_read_dword(&SEQ_INFO[runSeq].lengthMs);
+    unsigned long inIter = now - iterStartMs;
+    if (len == LEN_INDEFINITE) remaining = 0xFFFF;
+    else if (inIter < len) {
+      unsigned long s10 = (len - inIter + 9) / 10;
+      remaining = s10 > 0xFFFE ? 0xFFFF : (unsigned int)s10;
+    }
+  }
+  byte sub = runSeq;
+  if (running && progRandom) sub = RandomState == 1 ? pgm_read_byte(&RANDOM_SEQ[RandomMode]) : SUB_SEQ_OFF;
+  st[0] = runSeq;
+  st[1] = runSource;
+  st[2] = runState;
+  st[3] = sub;
+  st[4] = runIteration;
+  st[5] = runRepeat;
+  memcpy(st + 6, &elapsed, 4);             // AVR is little-endian, as the protocol
+  memcpy(st + 10, &remaining, 2);
+  st[12] = runCounter;
+  st[13] = gpioCode;
+  st[14] = lastError;
+  st[15] = errorCount;
+}
+
+byte registerByte(byte r, const byte* st) {
+  if (r < sizeof IDENTITY) return pgm_read_byte(&IDENTITY[r]);
+  if (r >= REG_STATUS && r < REG_STATUS + 16) return st[r - REG_STATUS];
+  if (r > REG_INFO_INDEX && r < 0x56) return pgm_read_byte((const byte*)&SEQ_INFO[infoIndex] + (r - REG_INFO_INDEX - 1));
+  switch (r) {
+    case REG_BRIGHTNESS:         return brightness;
+    case REG_CONFIG:             return cfgConfig;
+    case REG_DEFAULT_BRIGHTNESS: return cfgDefaultBrightness;
+    case REG_INFO_INDEX:         return infoIndex;
+    default:                     return 0;
+  }
+}
+
+// A read: up to 32 bytes from the pointer. The status block is built once, inside the interrupt,
+// so its multi-byte fields cannot tear; the pointer does not move (it stays until the next write).
+void requestEvent() {
+  byte st[16];
+  byte out[32];
+  statusBlock(st);
+  for (byte i = 0; i < sizeof out; i++) {
+    byte r = regPtr + i;
+    out[i] = (regPtr + i < 0x80) ? registerByte(r, st) : 0;
+  }
+  Wire.write(out, sizeof out);
 }
