@@ -1,0 +1,12 @@
+name: i2c_switch_no_resume
+description: "Toggle (cmd 5), then FlashAll (cmd 26) at 2.1 s: FlashAll replaces Toggle mid-run and Toggle never comes back"
+firmware_reset: true
+eeprom: default
+run_ms: 8000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [5] }
+  - at_ms: 2100
+    i2c_write: { addr: 0x14, bytes: [26] }

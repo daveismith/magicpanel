@@ -1,8 +1,10 @@
 name: mode_change_mid_run
-description: "Rotary changes at runtime: mode 0 -> mode 2 (FlashAll repeating) at 1 s -> mode 0 at 5 s; each change must blank the panel (blankPANEL)"
+description: "Rotary changes at runtime: mode 0 -> mode 2 (FlashAll repeating) at 1 s -> mode 0 at 5 s; each change is accepted after the 20 ms debounce, blanks the panel (blankPANEL), and the return to 0 stops FlashAll mid-run"
 firmware_reset: true
 eeprom: default
 run_ms: 7000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
 steps:
   - at_ms: 1000
     gpio_set: { pin: C1, value: 0 }

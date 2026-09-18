@@ -124,3 +124,46 @@ latch` (per scenario) or `MP_COMPARE_MODE=latch` restores the strict behaviour. 
 count; lower `MP_SETTLE_MS` if steps shorter than that are introduced. Timing tolerance on
 settled states stays 0 by default, so a change in bit-bang speed still shows as a timing
 failure (settled timestamps move by the transfer-time delta).
+
+**D-19 — Main-loop sequence engine and trigger semantics (2026-09-18, owner decision).** The dev
+sketch runs every animation from `loop()`, one frame at a time; `receiveEvent()` only records the
+command byte, so nothing is drawn inside the TWI ISR and commands can no longer nest or corrupt a
+MAX7221 burst (guarded in `test_regression`). Trigger rules:
+- *I2C:* a known command (0–39) abandons the running sequence at its next frame boundary and starts
+  the new one; sending the same command restarts it. Unknown codes and empty writes change nothing
+  but still consume one `random()` and reset `RandomTime`, as the specimen's handler did (D-16).
+  Only byte 0 is read, so multi-byte writes still deafen the receiver (baselined as-is).
+- *GPIO:* the decoded rotary/jumper code (same mapping and priority as the specimen) is debounced
+  as a whole: a code is accepted after it has read the same for `DEBOUNCE_MS` = 20 ms, and accepting
+  a code different from the previous one is the trigger. Codes 1–9 blank the panel and start that
+  mode, which loops until the next trigger; code 0 blanks and stops a running GPIO mode but lets an
+  I2C sequence finish. Transient codes while a rotary switch moves are ignored. The power-on code is
+  accepted immediately without blanking, so a fitted jumper starts when it did before.
+  The owner first considered falling-edge triggers and chose the stabilised value instead.
+- *Resume:* when an I2C sequence ends and the accepted code is 1–9, that mode restarts from its
+  beginning; Random modes (6, 7, 9) resume in their off interval with `RandomTime = 0`.
+- When a trigger interrupts a running sequence, `VMagicPanel` is cleared in memory (not drawn) so
+  the abandoned pattern's pixels cannot bleed into patterns that do not start with `allOFF()`.
+- Random off-intervals stay counted in loop passes (one Speed-gated pass each), unchanged.
+
+Implementation: each pattern is transcribed line for line into a stackless coroutine using GCC
+labels-as-values; `delay(n)` became `PAT_DELAY(n)`, which yields and resumes on the same
+`micros()` condition `delay()` used. This keeps the transcription reviewable against the specimen
+and preserves frame content and `random()` order exactly. Rule: no local variable may be live
+across a yield; loop counters live in the `sq` struct.
+
+**D-20 — Timing tolerance for the main-loop engine: 8 000 cycles.** Polling the frame deadline from
+`loop()` lands frames slightly later than a spinning `delay()`; an 8 µs calibrated early exit
+(`SCHED_COMP_US`, chosen by sweeping 0/4/8/12) minimises the drift. Measured against the specimen
+baselines, every settled frame of the unchanged scenarios matches in content and lies within
+3 347 cycles (0.21 ms, worst `mode_5_onetest`); power-on is 624 cycles later because startup clears
+more `.bss`. All generated scenarios therefore carry `timing_tolerance_cycles: 8000` (0.5 ms).
+That is far below the smallest real timing difference the suite must detect (the 20 ms
+`toggle_faster` mutant; 50 ms per step between Alert and FlashAll), so the specimen-derived
+mutant self-test is unaffected.
+
+**D-21 — FadeOutIn overrun contained.** `VMagicPanel` is now `[16][8]`; rows 8–15 are a spill area
+that is never displayed. FadeOutIn still sets 16 rows with the same expressions (so its `random()`
+calls and per-frame cost are unchanged) but can no longer overwrite other globals. The specimen's
+side effect (a later Quadrant/RandomPixel doing nothing, firmware-map R-4) is gone; the per-pattern
+counters it corrupted no longer exist. No baseline depended on it.

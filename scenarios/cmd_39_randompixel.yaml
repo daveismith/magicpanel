@@ -3,6 +3,8 @@ description: "I2C command 39: RandomPixel(40)"
 firmware_reset: true
 eeprom: default
 run_ms: 7700
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
 steps:
   - at_ms: 100
     i2c_write: { addr: 0x14, bytes: [39] }

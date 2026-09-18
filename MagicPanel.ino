@@ -38,30 +38,15 @@ byte first_time       = 1;	// used for 4-bit (0 2 3 5) input reading - reset all
   			        // when 4-bit address value changes (except the first time on power up)
 byte DigInState       = 0;
 byte lastDigInState;  //= 0;
-  
-// State Variables
 
-int AlertTime       = 0;
-int TraceUpTime     = 0;
-int TraceDownTime   = 0;
-int TraceRightTime  = 0;
-int TraceLeftTime   = 0;
-int QuadrantTime    = 0;
-int CompressTime    = 0;
-int ExpandTime      = 0;
-int ToggleTime      = 0;
-int RandomPixelTime = 0;
-
-byte TopRow = 0;
-byte BotRow = 0;
+// State Variables (Random() state machine; counters of the pattern functions now live in `sq`)
 
 byte RandomState = 0;
 byte RandomMode;     // selected mode
 
 unsigned long RandomTime = 0;
-             
-//unsigned long RandomInterval = 0;     // time between function calls
 unsigned long RandomOnTime = 0;
+int RandomInterval = 0;   // per-pass argument of the original Random(int); int on purpose (see mode 7)
 
 /*
 To load a sketch onto Magic Panel as Arduino Duemilanove w/ ATmega328
@@ -79,24 +64,24 @@ Top 7221 = 0
 Bottom 7221 =1
 
 Assign the pins from the 328p to LedControl
- 
- pin D8 is connected to the DataIn 
- pin D7 is connected to the CLK 
- pin D6 is connected to LOAD 
+
+ pin D8 is connected to the DataIn
+ pin D7 is connected to the CLK
+ pin D6 is connected to LOAD
  We have two MAX7221 on the Magic Panel, so we use 2.
  */
 LedControl lc=LedControl(8,7,6,2);
 
 unsigned long delaytime=30;
-unsigned long scrolldelaytime=50;
 
-boolean VMagicPanel[8][8];  // [Row][Col]
+boolean VMagicPanel[16][8];  // [Row][Col]; only rows 0-7 are displayed. Rows 8-15 are a spill area:
+                             // FadeOutIn sets 16 rows (as the original did), which used to overrun the array
 unsigned char MagicPanel[16];
 int NumLoops=2;
 
-void setup() 
-{ 
-  Wire.begin(I2CAdress);                   // Start I2C Bus as Master I2C Address
+void setup()
+{
+  Wire.begin(I2CAdress);                   // Start I2C Bus as Slave at I2C Address
   Wire.onReceive(receiveEvent);            // register event so when we receive something we jump to receiveEvent();
   /*
    The MAX72XX is in power-saving mode on startup,
@@ -107,17 +92,17 @@ void setup()
   /* Set the brightness to a medium values */
   lc.setIntensity(0,15);
   lc.setIntensity(1,15);
-  
+
   /* and clear the display */
   lc.clearDisplay(0);
   lc.clearDisplay(1);
 
   randomSeed(analogRead(A3));           // Randomizer
-  
+
   // SETUP 6 DIGITAL PINS FOR MANUAL CONTROL
-  
+
   // Jumpe Pins
-  pinMode(11, INPUT);             // set pin 11 to input - input 3  
+  pinMode(11, INPUT);             // set pin 11 to input - input 3
   pinMode(12, OUTPUT);            // set pin PB4 to output - pin 4 - used to allow a jumper from pin 4 to adjacent pin to pull down the adjacent pin
   pinMode(13, INPUT);             // set pin 13 to input - input 5
 
@@ -125,555 +110,472 @@ void setup()
   digitalWrite(A0, HIGH);         // turn on pullup resistors
   digitalWrite(A1, HIGH);         // turn on pullup resistors
   digitalWrite(A2, HIGH);         // turn on pullup resistors
-  
+
   digitalWrite(11, HIGH);         // turn on pullup resistors
   digitalWrite(13, HIGH);         // turn on pullup resistors
 
   digitalWrite(12, LOW);         // set pin PC1 to output - pin 1
-  ////digitalWrite(A1, LOW);         // set pin PB4 to output - pin 4
 }
 
-void loop() { 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Sequence engine
+//
+// Every animation runs from loop(), one frame at a time; no display work happens in an ISR.
+// Each pattern is a stackless coroutine: PAT_DELAY(ms) replaces the original delay(ms), records
+// micros() and returns to loop(); the scheduler resumes the pattern right after the PAT_DELAY once
+// micros() - start >= ms*1000 (the same exit condition as the core's delay()). Frames
+// (MapBoolGrid + PrintGrid) are clocked out atomically in main context.
+//
+// Coroutine rule: no local variable may be live across a yield. Loop counters that span a
+// PAT_DELAY live in `sq`; loops without a yield inside may use ordinary locals.
+//
+// Triggers: an I2C write (receiveEvent only records it) or a debounced change of the rotary/jumper
+// code abandons the running sequence at its next yield and starts the new one; the same trigger
+// restarts it. GPIO modes loop until the next trigger; an I2C sequence that ends while a GPIO
+// mode is selected resumes that mode from its start.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  time = millis();		        // get an updated time stamp
-  if (time - last_time > Speed)  	// check if time has passed to change states - used to slow down the main loop
-  {
-    last_time = time;			// reset the timer
-    
-   //***********************************************
-   // These are the Binary Coded Input Pins
-   //   
-    DigInState = 0;			// read in the 4-bit address line
-    if (digitalRead(A0) == LOW)        	// 0
-    { DigInState = DigInState + 4; }
-    if (digitalRead(A1) == LOW)        	// 1
-    { DigInState = DigInState + 2; }
-    if (digitalRead(A2) == LOW)       	// 2
-    { DigInState = DigInState + 1; }
-   
-   
-   //***********************************************
-   // These are the Jumper Pins
-   //
-    if (digitalRead(11) == LOW)        	// 3
-    { DigInState = 8;    }              // if Jumper-1 is Placed - Don't look at Rotary Sw Values
-    if (digitalRead(13) == LOW)        	// 5
-    { DigInState = 9;    }              // if Jumper-2 is Placed - Don't look at any other Input Values
-      
-    if(first_time)
-    {
-      lastDigInState = DigInState;	// dont allow a change in DigInState values if this is the first time through
-      first_time = 0;
-    }
+#define CO_CAT2(a, b) a##b
+#define CO_CAT(a, b)  CO_CAT2(a, b)
+#define CO_BEGIN(pcv) do { if (pcv) goto *(pcv); } while (0)
+#define CO_YIELD(pcv) do { (pcv) = &&CO_CAT(co_resume_, __LINE__); return true; CO_CAT(co_resume_, __LINE__): ; } while (0)
+#define CO_END(pcv)   do { (pcv) = 0; return false; } while (0)
 
-    if (DigInState != lastDigInState)  	//if DigInState has changed...
-    {
-       blankPANEL();                    // Clear LED's
-    }
+// Scheduler compensation: the deadline is polled from loop() and the pattern is resumed through
+// two coroutine levels, which lands each frame on average ~8 us later than the original's
+// delay() did. Ending the wait this much earlier keeps the frame timing within the tolerance
+// recorded in docs/decisions.md (D-20). micros() has 4 us resolution.
+#ifndef SCHED_COMP_US
+#define SCHED_COMP_US 8
+#endif
 
-    lastDigInState = DigInState;	// Store the current Input Status  
-      
-    switch (DigInState)			// Call the appropriate code routine - based on the input address values of the control lines A B C
-    {
-       case 0: 			        // DO NOTHING - ALLOW I2C FUNCTIONS TO OVER-RIDE 6-PIN INPUT
-       {
-        
-        ///////////////////////////////////
-        //  Toggle(100);
-        //  Alert(100);
-        //  TraceUp(1);
-        //  TraceDown(1);
-        //  Compress(5, 100);
-        //  Expand (10, 50);
-        //  Random();       
-        
-         //////////////////////////////////
-         
-          break;
-       }
-       case 1: 			        // FADE IN AND OUT: 
-       {  allOFF();
-          FadeOutIn(1);
-          allOFF();
-          break;
-       }
-       case 2: 			        // RANDOM FAST: 
-       {  
-          allOFF();
-          FlashAll(8, 200);
-          allOFF();
-          break;
-       }
-       case 3: 			        // 2 LOOP: 
-       {  
-          allOFF();
-          TwoLoop(2);
-          allOFF();
-          break;
-       }
-       case 4: 			        // TRACE DOWN: 
-       {  
-          allOFF();
-          TraceDown(5,1);
-          allOFF();
-          break;
-       }
-       case 5: 			        // ONE TEST: 
-       {  
-          allOFF();
-          OneTest(30);
-          allOFF();
-          break;
-       }   
-       case 6: 			        // Random Fast: 
-       {  
-          Random(random(8000,14000));
-          break;
-       }
-       case 7: 			        // RANDOM SLOW: 
-       {
-          Random(random(40000,60000));    // 5 to 8 minute interval between light patterns
-          break;
-       }
-        case 8: 			// Jumper 1  : 
-       {  
-          allONTimed(0);   
-          break;
-       }
-       case 9: 			        // Jumper 2  : 
-       {  
-          Random(random(8000,14000));  // 1 to 2 min interval between light patterns
-          break;
-       }
+enum { WAIT_NONE, WAIT_US, WAIT_PASS };
+byte waitKind = WAIT_NONE;
+unsigned long waitStart = 0;
+unsigned long waitUs = 0;
+unsigned int passCount = 0;      // incremented on every Speed-gated loop pass
+unsigned int waitPassMark = 0;
 
-       default:
-       {                                // OFF: 
-          allOFF();                     // Clear LED's
-          break;
-       }
-    }//end switch,\
+void* patPC  = 0;                // resume point of the running pattern
+void* progPC = 0;                // resume point of the running program
+struct { int r; int i; int j; } sq;   // loop counters of the running pattern
 
-/*6
- loopCount++; 
-   if (t > twitchMPtime)
-    {
-     randomDisplay();                           // call playRandom routine
-     loopCount = 0;                           // reset loopCount
-     twitchMPtime = random (20,90) * 500;   // set the next twitchMPtime
-//     delay (twitchMPtime);
-     
+#define PAT_DELAY(ms)    do { waitStart = micros(); waitUs = (unsigned long)(ms) * 1000UL - SCHED_COMP_US; waitKind = WAIT_US; CO_YIELD(patPC); } while (0)
+#define PROG_WAIT_PASS() do { waitKind = WAIT_PASS; waitPassMark = passCount; CO_YIELD(progPC); } while (0)
+
+enum {
+  P_NONE, P_EYESCAN, P_CYLONCOL, P_CYLONROW, P_FLASHV, P_FLASHQ, P_FLASHALL, P_ONELOOP, P_TWOLOOP,
+  P_FADEOUTIN, P_THETEST, P_ONETEST, P_SYMBOL, P_CROSS, P_ALLONTIMED, P_TRACEDOWN, P_TRACEUP,
+  P_TRACELEFT, P_TRACERIGHT, P_RANDOMPIXEL, P_QUADRANT, P_TOGGLE, P_ALERT, P_EXPAND, P_COMPRESS,
+  P_MYSYMBOL
+};
+
+// How a caller wraps a pattern: allOFF() before, allOFF() after, and whether it sets
+// RandomTime = RandomOnTime + 1 afterwards (as every original call site with a pattern did).
+#define SQ_PRE  1
+#define SQ_POST 2
+#define SQ_RT   4
+#define SQ_WRAP (SQ_PRE | SQ_POST | SQ_RT)
+struct SeqEntry { byte flags; byte pat; int a; int b; };
+
+// I2C command byte -> sequence (transcribed from the original receiveEvent switch).
+const SeqEntry I2C_TABLE[40] PROGMEM = {
+  { SQ_PRE,           P_NONE,        0,     0 },  //  0 panel off
+  { SQ_RT,            P_ALLONTIMED,  0,     0 },  //  1 on "indefinitely" (1000 s)
+  { SQ_RT,            P_ALLONTIMED,  2000,  0 },  //  2 on 2 s, then falls through into 3 (no break in the original)
+  { SQ_RT,            P_ALLONTIMED,  5000,  0 },  //  3 on 5 s (stays on: `allOFF;` is a no-op)
+  { SQ_RT,            P_ALLONTIMED,  10000, 0 },  //  4 on 10 s
+  { SQ_WRAP,          P_TOGGLE,      10,    0 },  //  5
+  { SQ_WRAP,          P_ALERT,       8,     0 },  //  6
+  { SQ_WRAP,          P_ALERT,       20,    0 },  //  7
+  { SQ_WRAP,          P_TRACEUP,     5,     1 },  //  8
+  { SQ_WRAP,          P_TRACEUP,     5,     2 },  //  9
+  { SQ_WRAP,          P_TRACEDOWN,   5,     1 },  // 10
+  { SQ_WRAP,          P_TRACEDOWN,   5,     2 },  // 11
+  { SQ_WRAP,          P_TRACERIGHT,  5,     1 },  // 12
+  { SQ_WRAP,          P_TRACERIGHT,  5,     2 },  // 13
+  { SQ_WRAP,          P_TRACELEFT,   5,     1 },  // 14
+  { SQ_WRAP,          P_TRACELEFT,   5,     2 },  // 15
+  { SQ_WRAP,          P_EXPAND,      5,     1 },  // 16
+  { SQ_WRAP,          P_EXPAND,      5,     2 },  // 17
+  { SQ_WRAP,          P_COMPRESS,    5,     1 },  // 18
+  { SQ_WRAP,          P_COMPRESS,    5,     2 },  // 19
+  { SQ_WRAP,          P_CROSS,       0,     0 },  // 20
+  { SQ_WRAP,          P_CYLONCOL,    2,     140 },// 21
+  { SQ_WRAP,          P_CYLONROW,    2,     140 },// 22
+  { SQ_POST | SQ_RT,  P_EYESCAN,     2,     100 },// 23
+  { SQ_POST | SQ_RT,  P_FADEOUTIN,   1,     0 },  // 24
+  { SQ_POST | SQ_RT,  P_FADEOUTIN,   2,     0 },  // 25
+  { SQ_POST | SQ_RT,  P_FLASHALL,    8,     200 },// 26
+  { SQ_POST | SQ_RT,  P_FLASHV,      8,     200 },// 27
+  { SQ_POST | SQ_RT,  P_FLASHQ,      8,     200 },// 28
+  { SQ_WRAP,          P_TWOLOOP,     2,     0 },  // 29
+  { SQ_WRAP,          P_ONELOOP,     2,     0 },  // 30
+  { SQ_WRAP,          P_THETEST,     30,    0 },  // 31
+  { SQ_WRAP,          P_ONETEST,     30,    0 },  // 32
+  { SQ_WRAP,          P_SYMBOL,      0,     0 },  // 33
+  { SQ_WRAP,          P_MYSYMBOL,    0,     0 },  // 34
+  { SQ_WRAP,          P_QUADRANT,    5,     1 },  // 35
+  { SQ_WRAP,          P_QUADRANT,    5,     2 },  // 36
+  { SQ_WRAP,          P_QUADRANT,    5,     3 },  // 37
+  { SQ_WRAP,          P_QUADRANT,    5,     4 },  // 38
+  { SQ_WRAP,          P_RANDOMPIXEL, 40,    0 },  // 39
+};
+
+// Random() mode -> sequence (transcribed from the original Random() nested switch; random(0,35)
+// never yields 35, and mode 1 has no case).
+const SeqEntry RANDOM_TABLE[36] PROGMEM = {
+  { SQ_PRE,           P_NONE,        0,     0 },  //  0 panel off (counts passes)
+  { 0,                P_NONE,        0,     0 },  //  1 no case (counts passes)
+  { SQ_WRAP,          P_ALLONTIMED,  2000,  0 },  //  2
+  { SQ_WRAP,          P_TOGGLE,      10,    0 },  //  3
+  { SQ_WRAP,          P_ALERT,       8,     0 },  //  4
+  { SQ_WRAP,          P_TRACEUP,     5,     1 },  //  5
+  { SQ_WRAP,          P_TRACEUP,     5,     2 },  //  6
+  { SQ_WRAP,          P_TRACEDOWN,   5,     1 },  //  7
+  { SQ_WRAP,          P_TRACEDOWN,   5,     2 },  //  8
+  { SQ_WRAP,          P_EXPAND,      5,     1 },  //  9
+  { SQ_WRAP,          P_EXPAND,      5,     2 },  // 10
+  { SQ_WRAP,          P_COMPRESS,    5,     1 },  // 11
+  { SQ_WRAP,          P_COMPRESS,    5,     2 },  // 12
+  { SQ_WRAP,          P_CROSS,       0,     0 },  // 13
+  { SQ_WRAP,          P_CYLONCOL,    2,     140 },// 14
+  { SQ_WRAP,          P_CYLONROW,    2,     140 },// 15
+  { SQ_POST | SQ_RT,  P_EYESCAN,     2,     100 },// 16
+  { SQ_POST | SQ_RT,  P_FADEOUTIN,   1,     0 },  // 17
+  { SQ_POST | SQ_RT,  P_FADEOUTIN,   2,     0 },  // 18
+  { SQ_POST | SQ_RT,  P_FLASHALL,    8,     200 },// 19
+  { SQ_POST | SQ_RT,  P_FLASHV,      8,     200 },// 20
+  { SQ_POST | SQ_RT,  P_FLASHQ,      8,     200 },// 21
+  { SQ_WRAP,          P_TWOLOOP,     2,     0 },  // 22
+  { SQ_WRAP,          P_ONELOOP,     2,     0 },  // 23
+  { SQ_WRAP,          P_THETEST,     30,    0 },  // 24
+  { SQ_WRAP,          P_ONETEST,     30,    0 },  // 25
+  { SQ_WRAP,          P_SYMBOL,      0,     0 },  // 26
+  { SQ_WRAP,          P_QUADRANT,    5,     1 },  // 27
+  { SQ_WRAP,          P_QUADRANT,    5,     2 },  // 28
+  { SQ_WRAP,          P_QUADRANT,    5,     3 },  // 29
+  { SQ_WRAP,          P_QUADRANT,    5,     4 },  // 30
+  { SQ_WRAP,          P_RANDOMPIXEL, 40,    0 },  // 31
+  { SQ_WRAP,          P_TRACERIGHT,  5,     1 },  // 32
+  { SQ_WRAP,          P_TRACERIGHT,  5,     2 },  // 33
+  { SQ_WRAP,          P_TRACELEFT,   5,     1 },  // 34
+  { SQ_WRAP,          P_TRACELEFT,   5,     2 },  // 35
+};
+
+// Rotary/jumper code -> looping sequence (transcribed from the original loop() switch).
+// Codes 6, 7 and 9 run the Random() state machine instead.
+const SeqEntry GPIO_TABLE[10] PROGMEM = {
+  { 0,                P_NONE,        0,     0 },  // 0 nothing (I2C only)
+  { SQ_PRE | SQ_POST, P_FADEOUTIN,   1,     0 },  // 1
+  { SQ_PRE | SQ_POST, P_FLASHALL,    8,     200 },// 2
+  { SQ_PRE | SQ_POST, P_TWOLOOP,     2,     0 },  // 3
+  { SQ_PRE | SQ_POST, P_TRACEDOWN,   5,     1 },  // 4
+  { SQ_PRE | SQ_POST, P_ONETEST,     30,    0 },  // 5
+  { 0,                P_NONE,        0,     0 },  // 6 Random(random(8000,14000))
+  { 0,                P_NONE,        0,     0 },  // 7 Random(random(40000,60000))
+  { 0,                P_ALLONTIMED,  0,     0 },  // 8 on for 1000 s, repeating
+  { 0,                P_NONE,        0,     0 },  // 9 Random(random(8000,14000))
+};
+
+enum { PROG_NONE, PROG_I2C, PROG_GPIO };
+byte progKind = PROG_NONE;
+byte progCode = 0;
+SeqEntry progEntry;               // entry of the running program (or of the Random() mode)
+
+byte gpioCode = 0;                // accepted rotary/jumper code (0 = no GPIO mode)
+#define DEBOUNCE_MS 20            // a new rotary/jumper code must be stable this long to count
+byte gpioCandidate = 0;           // code currently being debounced
+unsigned long gpioCandidateSince = 0;
+
+volatile int  i2cCmd = 0;         // last byte received over I2C (-1 for an empty write)
+volatile byte i2cCount = 0;       // writes received since loop() last looked
+
+byte patId = P_NONE;
+int patA = 0;
+int patB = 0;
+
+bool isRandomMode(byte code) { return code == 6 || code == 7 || code == 9; }
+
+void clearVGrid() {
+  for (int row = 0; row < 8; row++)
+    for (int col = 0; col < 8; col++)
+      VMagicPanel[row][col] = false;
+}
+
+// Abandon whatever runs and start a new program. The in-memory grid is cleared (not drawn) only
+// when a sequence was interrupted, so leftovers of the abandoned sequence cannot bleed into
+// patterns that do not start with allOFF(); an idle panel keeps its grid as the original did.
+void startProgram(byte kind, byte code) {
+  if (progKind != PROG_NONE) clearVGrid();
+  progKind = kind;
+  progCode = code;
+  progPC = 0;
+  patPC = 0;
+  waitKind = WAIT_NONE;
+  if (kind == PROG_I2C) memcpy_P(&progEntry, &I2C_TABLE[code], sizeof(SeqEntry));
+  else                  memcpy_P(&progEntry, &GPIO_TABLE[code], sizeof(SeqEntry));
+}
+
+void stopProgram() {
+  if (progKind != PROG_NONE) clearVGrid();
+  progKind = PROG_NONE;
+  progPC = 0;
+  patPC = 0;
+  waitKind = WAIT_NONE;
+}
+
+// resume = true when a GPIO mode comes back after an I2C sequence: the Random() modes then
+// continue in their off state with a fresh count, as the original's receiveEvent reset RandomTime.
+void startGpio(byte code, bool resume) {
+  startProgram(PROG_GPIO, code);
+  if (isRandomMode(code)) {
+    RandomState = resume ? 2 : 0;
+    RandomTime = 0;
   }
- blankPANEL(); 
-*/ 
-  }// end of if(time)
-}//end of loop
+}
 
+void startPattern(byte id, int a, int b) {
+  patId = id; patA = a; patB = b;
+  patPC = 0;
+  sq.r = 0; sq.i = 0; sq.j = 0;
+}
 
-void Random(int RandomInterval)
-{
- switch (RandomState) 
+bool runPattern();
+
+// Runs the wrapped pattern of `progEntry`: allOFF() before, the pattern, then the RandomTime
+// update and allOFF() after, in the order of the original call sites.
+#define PROG_RUN_ENTRY()                                                        \
+  do {                                                                          \
+    if (progEntry.flags & SQ_PRE) allOFF();                                     \
+    if (progEntry.pat != P_NONE) {                                              \
+      startPattern(progEntry.pat, progEntry.a, progEntry.b);                    \
+      while (runPattern()) CO_YIELD(progPC);                                    \
+    }                                                                           \
+  } while (0)
+
+bool runProgram() {
+  CO_BEGIN(progPC);
+  if (progKind == PROG_I2C) {
+    PROG_RUN_ENTRY();
+    if (progCode == 2) {                    // case 2 has no break: falls into case 3
+      RandomTime = RandomOnTime + 1;
+      startPattern(P_ALLONTIMED, 5000, 0);
+      while (runPattern()) CO_YIELD(progPC);
+    }
+    if (progEntry.flags & SQ_RT) RandomTime = RandomOnTime + 1;
+    if (progEntry.flags & SQ_POST) allOFF();
+    CO_END(progPC);
+  }
+
+  if (isRandomMode(progCode)) {
+    // Port of Random(int RandomInterval): one state step per Speed-gated loop pass, exactly as
+    // loop() called it once per pass. The argument is drawn every pass, and truncated to int.
+    for (;;) {
+      RandomInterval = (progCode == 7) ? random(40000, 60000) : random(8000, 14000);
+      switch (RandomState) {
+        case 0:
+          RandomMode = random(0, 35);
+          RandomOnTime = random(1000, 1500);
+          RandomTime = 0;
+          RandomState++;
+          break;
+        case 1:
+          memcpy_P(&progEntry, &RANDOM_TABLE[RandomMode], sizeof(SeqEntry));
+          PROG_RUN_ENTRY();
+          if (progEntry.flags & SQ_RT) RandomTime = RandomOnTime + 1;
+          if (progEntry.flags & SQ_POST) allOFF();
+          if (RandomTime++ > RandomOnTime) {
+            RandomTime = 0;
+            RandomState++;
+          }
+          break;
+        case 2:
+          allOFF();
+          if (RandomTime++ > RandomInterval) {
+            RandomTime = 0;
+            RandomState = 0;
+          }
+          break;
+      }
+      PROG_WAIT_PASS();
+    }
+  }
+
+  for (;;) {                                // GPIO modes 1-5 and 8: one run per loop pass, forever
+    PROG_RUN_ENTRY();
+    if (progEntry.flags & SQ_POST) allOFF();
+    PROG_WAIT_PASS();
+  }
+}
+
+void stepEngine() {
+  if (progKind == PROG_NONE) return;
+  if (waitKind == WAIT_US) {
+    if (micros() - waitStart < waitUs) return;
+  } else if (waitKind == WAIT_PASS) {
+    if (passCount == waitPassMark) return;
+  }
+  waitKind = WAIT_NONE;
+  if (runProgram()) return;
+  byte ended = progKind;
+  progKind = PROG_NONE;
+  if (ended == PROG_I2C && gpioCode != 0) startGpio(gpioCode, true);
+}
+
+// I2C: take what receiveEvent recorded. Each received write consumes one random() and resets
+// RandomTime, as the original receiveEvent did; known commands (0-39) switch the sequence.
+void consumeI2C() {
+  if (i2cCount == 0) return;
+  noInterrupts();
+  byte n = i2cCount;
+  int cmd = i2cCmd;
+  i2cCount = 0;
+  interrupts();
+  while (n--) {
+    RandomOnTime = random(1000, 1500);
+    RandomTime = 0;
+  }
+  if (cmd >= 0 && cmd < 40) startProgram(PROG_I2C, cmd);
+}
+
+byte readInputs() {
+  byte code = 0;
+  if (digitalRead(A0) == LOW) { code = code + 4; }   // rotary bit 2
+  if (digitalRead(A1) == LOW) { code = code + 2; }   // rotary bit 1
+  if (digitalRead(A2) == LOW) { code = code + 1; }   // rotary bit 0
+  if (digitalRead(11) == LOW) { code = 8; }          // Jumper 1 overrides the rotary switch
+  if (digitalRead(13) == LOW) { code = 9; }          // Jumper 2 overrides everything
+  return code;
+}
+
+// A newly accepted rotary/jumper code. Codes 1-9 blank the panel (as the original did on every
+// mode change) and start that mode, abandoning whatever runs. Code 0 blanks and stops a running
+// GPIO mode; an I2C sequence is left to finish, and nothing resumes after it.
+void acceptGpio(byte code, bool blank) {
+  gpioCode = code;
+  if (code != 0) {
+    if (blank) blankPANEL();
+    startGpio(code, false);
+  } else if (progKind != PROG_I2C) {
+    if (blank) blankPANEL();
+    stopProgram();
+  }
+}
+
+// GPIO trigger on a stabilised value: the decoded code (not each pin) is debounced. A code is
+// accepted once it has read the same for DEBOUNCE_MS; accepting a code different from the last
+// accepted one is the trigger. Codes seen while a rotary switch is moving are not stable and are
+// ignored. The power-on code is accepted immediately, so a fitted jumper starts at once.
+void gpioPass() {
+  DigInState = readInputs();
+  if (first_time) {
+    first_time = 0;
+    lastDigInState = DigInState;
+    gpioCandidate = DigInState;
+    acceptGpio(DigInState, false);    // power-on code counts as a trigger, without blanking
+    return;
+  }
+  if (DigInState != gpioCandidate) {
+    gpioCandidate = DigInState;
+    gpioCandidateSince = time;
+    return;
+  }
+  if (gpioCandidate != lastDigInState && time - gpioCandidateSince >= DEBOUNCE_MS) {
+    lastDigInState = gpioCandidate;
+    acceptGpio(gpioCandidate, true);
+  }
+}
+
+void loop() {
+  consumeI2C();
+  time = millis();
+  if (time - last_time > Speed)  	// Speed-gated pass: read the inputs (the original loop pass)
   {
-    case 0:
-    {
-      RandomMode = random(0,35); // randomly select DisplayMode 0 to 25
-      //RandomMode = 25;
-        //  0 = Toggle(100);
-        //  1 = Alert(100);
-        //  2 = TraceUp(1);
-        //  3 = TraceDown(1);
-        //  4 = Compress(5, 100);
-        //  5 = Expand (10, 50);
-        //  6 = AllON();
-        //  7 = AllOFF();
-        //...
-        
-        
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
- //     RandomInterval = 1500;// 2500;//random(50000, 100000);  // randomly select the interval between function calls - Panel is OFF
-//      RandomInterval = random(500, 1000);  // randomly select the interval between function calls - Panel is OFF
-      ///
-      ///  5000 = apprx 40 sec
-      ///  50000 = 400 secs or 6.5 mins
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-      RandomOnTime   = random(1000, 1500);// 8 to 12 seconds // ON Time - THIS TIME WILL CHANGE BASED ON THE SEQUENCE CALLED (For State Machine Based Functions)
-      RandomTime = 0;     
-      RandomState++;         // proceed to next state
-      break;
-    }
-    case 1:
-    {
-      switch(RandomMode)
-      {
-        case 0:              //  0 = Turns Panel Off
-        {    
-          allOFF();
-          break;
-        }
-        case 2:              //  2 = Turns Panel on for 2s
-        {
-          allOFF();
-          allONTimed(2000);
-          RandomTime = RandomOnTime + 1;
-          allOFF();
-          break;  
-        }
-        case 3:              //  3 = Begins Toggle Sequence: Top and Bottom Half of Panel Alternate
-        {
-          allOFF();
-          Toggle(10);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 4:              // 4 = Begins Alert Sequence (4s):  Panel Rapidly Flashes On & Off
-        {
-          allOFF();
-          Alert(8);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }       
-        case 5:              //  5 = Begins Trace Up Sequence (Type 1):  Each row of the MP lights up from bottom to top filling entire panel
-        {
-          allOFF();
-          TraceUp(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 6:              //  6 = Begins Trace Up Sequence (Type 2):  Each row of the MP lights up from bottom to top individually
-        {
-          allOFF();
-          TraceUp(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }        
-        case 7:             //  7 = Begins Trace Down Sequence (Type 1):  Each row of the MP lights up from top to bottom filling entire panel
-        {
-          allOFF();
-          TraceDown(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 8:              //  8 = Begins Trace Down Sequence (Type 2):  Each row of the MP lights up from top to bottom individually
-        {
-          allOFF();
-          TraceDown(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 9:              //  9 = Begins Expand Sequence (Type 1): Panel expands from center filling entire panel 
-        {
-          allOFF();
-          Expand(5,1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();  
-          break;
-        }
-        case 10:               //  10 = Begins Expand Sequence (Type 2): Ring of pixels expands from center of panel
-        {
-          allOFF();
-          Expand(5,2); 
-          RandomTime = RandomOnTime + 1; 
-          allOFF();  
-          break;
-        }
-        case 11:              //  11 = Begins Compress Sequence (Type 1): Panel compresses from outer edge filling entire panel 
-        {
-          allOFF();
-          Compress(5,1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();  
-          break;
-        }
-        case 12:               //  12 = Begins Compress Sequence (Type 2): Ring of pixels compresses from outer edge of panel
-        {
-          allOFF();
-          Compress(5,2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();  
-          break;
-        }
-        case 13:              //  13 = Begins Cross Sequence: Panel is lit to display an X for 3s
-        {
-          allOFF();
-          Cross();
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 14:              //  14 = Begins Cyclon Column Sequence:
-        {
-          allOFF();
-          CylonCol(2, 140);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 15:              //  15 = Begins Cyclon Row Sequence:
-        {
-          allOFF();
-          CylonRow(2, 140);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 16:              // 16 = Begins Eye Scan Sequence:
-        {
-          EyeScan(2, 100);
-          RandomTime = RandomOnTime + 1;     
-          allOFF(); 
-          break;
-        }        
-        case 17:             //  17 = Begins Fade Out/In Sequence:
-        {
-          FadeOutIn(1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 18:             //  18 = Begins Fade Out Sequence:
-        {
-          FadeOutIn(2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }          
-        case 19:              //  19 = Begins Flash Sequence:
-        {
-          FlashAll(8, 200);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 20:              //  20 = Begins Flash V Sequence:
-        {
-          FlashV(8, 200);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 21:              //  21 = Begins Flash Q Sequence:  Alternating quadrants of MP flash rapidly
-        {
-          FlashQ(8, 200);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();  
-          break;
-        }
-        case 22:              //  22 = Begins Two Loop Sequence:
-        {
-          allOFF();
-          TwoLoop(2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 23:              //  23 = Begins One Loop Sequence:
-        {
-          allOFF();
-          OneLoop(2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 24:              //  24 = Begins Test Sequence (Type 1):
-        {
-          allOFF();
-          TheTest(30);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 25:              //  25 = Begins Test Sequence (Type 2):
-        {
-          allOFF();
-          OneTest(30);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 26:              //  26 = Begins AI Logo Sequence:  Displays the AI Aurebesh characters for 3s that we see all over our awesome packages from Rotopod and McWhlr 
-        {
-          allOFF();
-          Symbol();
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 27:              //  27 = Begins Quadrant Sequence (Type 1):  Each Panel Quadrant lights up individually (TL, TR, BR, BL) 
-        {
-          allOFF();
-          Quadrant(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 28:              //  28 = Begins Quadrant Sequence (Type 2):  Each Panel Quadrant lights up individually (TR, TL, BL, BR) 
-        {
-          allOFF();
-          Quadrant(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 29:              //  29 = Begins Quadrant Sequence (Type 3):  Each Panel Quadrant lights up individually (TR, BR, BL, TL) 
-        {
-          allOFF();
-          Quadrant(5, 3);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 30:              //  30 = Begins Quadrant Sequence (Type 4):  Each Panel Quadrant Rights up individually (TL, BL, BR, TR) 
-        {
-          allOFF();
-          Quadrant(5, 4);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }  
-        case 31:              //  31 = Begins Random Pixel Sequence:  Random pixels flashe individually for 6s  
-        {
-          allOFF();
-          RandomPixel(40);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 32:             //  32 = Begins Trace Right Sequence (Type 1):  Each column of the MP lights up from left to right filling entire panel
-        {
-          allOFF();
-          TraceRight(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 33:              //  33 = Begins Trace Right Sequence (Type 2):  Each column of the MP lights up from left to right individually
-        {
-          allOFF();
-          TraceRight(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 34:             //  34 = Begins Trace Left Sequence (Type 1):  Each column of the MP lights up from right to left filling entire panel
-        {
-          allOFF();
-          TraceLeft(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 35:              //  35 = Begins Trace Left Sequence (Type 2):  Each column of the MP lights up from right to left individually
-        {
-          allOFF();
-          TraceLeft(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-               
-      }// end of nested switch(RandomMode)  
-       if(RandomTime++ > RandomOnTime)
-      {
-        RandomTime = 0;    // reset timer
-        //allOFF();         // turn off All Leds     
-        RandomState++;     // proceed to next state
-      }        
-      break;
-    }
-    
-    //
-    case 2:
-    {
-       allOFF();         // turn off All Leds    
-       
-       if(RandomTime++ > RandomInterval)        // OFF until timer expires
-       {
-        RandomTime  = 0;    // reset timer
-        RandomState = 0;     // proceed to next state
-       }
-       break;     
-    }     
-  }// end switch
-}//end Random
-
-
+    last_time = time;
+    passCount++;
+    gpioPass();
+  }
+  stepEngine();
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////
-// BHD Functions
+// BHD Functions (coroutines; each PAT_DELAY was a delay() in the original)
 ////////////////////////////////////////////////////////////////////////////////////////
 
-void EyeScan(int Repeats, int FlashDelay){
-  for(int i=0; i<Repeats; i++)
-  {
-    for(int j=0; j<8; j++){
-      SetRow(j, B11111111);
-      MapBoolGrid();
-      PrintGrid();
-      delay(FlashDelay);
-      SetRow(j, B00000000);
+void Frame() {
+  MapBoolGrid();
+  PrintGrid();
+}
+
+void ShowRows(byte r0, byte r1, byte r2, byte r3, byte r4, byte r5, byte r6, byte r7) {
+  SetRow(0, r0); SetRow(1, r1); SetRow(2, r2); SetRow(3, r3);
+  SetRow(4, r4); SetRow(5, r5); SetRow(6, r6); SetRow(7, r7);
+  Frame();
+}
+
+bool EyeScan(int Repeats, int FlashDelay) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < Repeats; sq.i++) {
+    for (sq.j = 0; sq.j < 8; sq.j++) {
+      SetRow(sq.j, B11111111);
+      Frame();
+      PAT_DELAY(FlashDelay);
+      SetRow(sq.j, B00000000);
     }
     allOFF();
-    delay(FlashDelay);
-    for(int j=0; j<8; j++){
-      SetCol(7-j, B11111111);
-      MapBoolGrid();
-      PrintGrid();
-      delay(FlashDelay);
-      SetCol(7-j, B00000000);
+    PAT_DELAY(FlashDelay);
+    for (sq.j = 0; sq.j < 8; sq.j++) {
+      SetCol(7 - sq.j, B11111111);
+      Frame();
+      PAT_DELAY(FlashDelay);
+      SetCol(7 - sq.j, B00000000);
     }
     allOFF();
-    delay(FlashDelay);
+    PAT_DELAY(FlashDelay);
   }
+  CO_END(patPC);
 }
 
-
-void CylonCol(int Repeats, int FlashDelay){
-  for(int i=0; i<Repeats; i++){
-    for(int j=0; j<8; j++){
-      SetCol(j, B11111111);
-      MapBoolGrid();
-      PrintGrid();
-      delay(FlashDelay);
-      SetCol(j, B00000000);
+bool CylonCol(int Repeats, int FlashDelay) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < Repeats; sq.i++) {
+    for (sq.j = 0; sq.j < 8; sq.j++) {
+      SetCol(sq.j, B11111111);
+      Frame();
+      PAT_DELAY(FlashDelay);
+      SetCol(sq.j, B00000000);
     }
-    for(int j=0; j<6; j++){
-      SetCol(6-j, B11111111);
-      MapBoolGrid();
-      PrintGrid();
-      delay(FlashDelay);
-      SetCol(6-j, B00000000);
+    for (sq.j = 0; sq.j < 6; sq.j++) {
+      SetCol(6 - sq.j, B11111111);
+      Frame();
+      PAT_DELAY(FlashDelay);
+      SetCol(6 - sq.j, B00000000);
     }
   }
+  CO_END(patPC);
 }
 
-void CylonRow(int Repeats, int FlashDelay){
-  for(int i=0; i<Repeats; i++){
-    for(int j=0; j<8; j++){
-      SetRow(j, B11111111);
-      MapBoolGrid();
-      PrintGrid();
-      delay(FlashDelay);
-      SetRow(j, B00000000);
+bool CylonRow(int Repeats, int FlashDelay) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < Repeats; sq.i++) {
+    for (sq.j = 0; sq.j < 8; sq.j++) {
+      SetRow(sq.j, B11111111);
+      Frame();
+      PAT_DELAY(FlashDelay);
+      SetRow(sq.j, B00000000);
     }
-    for(int j=0; j<6; j++){
-      SetRow(6-j, B11111111);
-      MapBoolGrid();
-      PrintGrid();
-      delay(FlashDelay);
-      SetRow(6-j, B00000000);
+    for (sq.j = 0; sq.j < 6; sq.j++) {
+      SetRow(6 - sq.j, B11111111);
+      Frame();
+      PAT_DELAY(FlashDelay);
+      SetRow(6 - sq.j, B00000000);
     }
   }
+  CO_END(patPC);
 }
 
-void FlashH(int Repeats, int FlashDelay){
+void FlashH(int Repeats, int FlashDelay){   // unreachable in the original; kept as dead code
   for(int i=0; i<Repeats; i++){
     for(int j=0; j<4; j++){
       SetRow(j, B11111111);
@@ -692,297 +594,252 @@ void FlashH(int Repeats, int FlashDelay){
   }
 }
 
-void FlashV(int Repeats, int FlashDelay){
-  for(int i=0; i<Repeats; i++){
-    for(int j=0; j<4; j++){
+bool FlashV(int Repeats, int FlashDelay) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < Repeats; sq.i++) {
+    for (int j = 0; j < 4; j++) {
       SetCol(j, B11111111);
-      SetCol(j+4, B00000000);
+      SetCol(j + 4, B00000000);
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(FlashDelay);
-    for(int j=0; j<4; j++){
+    Frame();
+    PAT_DELAY(FlashDelay);
+    for (int j = 0; j < 4; j++) {
       SetCol(j, B00000000);
-      SetCol(j+4, B11111111);
+      SetCol(j + 4, B11111111);
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(FlashDelay);
+    Frame();
+    PAT_DELAY(FlashDelay);
   }
+  CO_END(patPC);
 }
 
-void FlashQ(int Repeats, int FlashDelay){
-  for(int i=0; i<Repeats; i++){
-    SetRow(0, B00001111);
-    SetRow(1, B00001111);
-    SetRow(2, B00001111);
-    SetRow(3, B00001111);
-    SetRow(4, B11110000);
-    SetRow(5, B11110000);
-    SetRow(6, B11110000);
-    SetRow(7, B11110000);
-    MapBoolGrid();
-    PrintGrid();
-    delay(FlashDelay);
-    SetRow(0, B11110000);
-    SetRow(1, B11110000);
-    SetRow(2, B11110000);
-    SetRow(3, B11110000);
-    SetRow(4, B00001111);
-    SetRow(5, B00001111);
-    SetRow(6, B00001111);
-    SetRow(7, B00001111);
-    MapBoolGrid();
-    PrintGrid();
-    delay(FlashDelay);
+bool FlashQ(int Repeats, int FlashDelay) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < Repeats; sq.i++) {
+    ShowRows(B00001111, B00001111, B00001111, B00001111, B11110000, B11110000, B11110000, B11110000);
+    PAT_DELAY(FlashDelay);
+    ShowRows(B11110000, B11110000, B11110000, B11110000, B00001111, B00001111, B00001111, B00001111);
+    PAT_DELAY(FlashDelay);
   }
+  CO_END(patPC);
 }
 
-void FlashAll(int Repeats, int FlashDelay){
-  for(int i=0; i<Repeats; i++){
+bool FlashAll(int Repeats, int FlashDelay) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < Repeats; sq.i++) {
     allON();
-    delay(FlashDelay);
+    PAT_DELAY(FlashDelay);
     allOFF();
-    delay(FlashDelay);
+    PAT_DELAY(FlashDelay);
   }
+  CO_END(patPC);
 }
 
-void OneLoop(int Repeats){
-  for(int j=0; j<Repeats; j++){
-    for(int i=0; i<6; i++){
-      VMagicPanel[1][7-(1+i)]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(100);
-      VMagicPanel[1][7-(1+i)]=false;
+bool OneLoop(int Repeats) {
+  CO_BEGIN(patPC);
+  for (sq.j = 0; sq.j < Repeats; sq.j++) {
+    for (sq.i = 0; sq.i < 6; sq.i++) {
+      VMagicPanel[1][7 - (1 + sq.i)] = true;
+      Frame();
+      PAT_DELAY(100);
+      VMagicPanel[1][7 - (1 + sq.i)] = false;
     }
-    for(int i=0; i<4; i++){
-      VMagicPanel[2+i][1]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(150);
-      VMagicPanel[2+i][1]=false;
+    for (sq.i = 0; sq.i < 4; sq.i++) {
+      VMagicPanel[2 + sq.i][1] = true;
+      Frame();
+      PAT_DELAY(150);
+      VMagicPanel[2 + sq.i][1] = false;
     }
-    for(int i=0; i<6; i++){
-      VMagicPanel[6][(1+i)]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(100);
-      VMagicPanel[6][(1+i)]=false;
+    for (sq.i = 0; sq.i < 6; sq.i++) {
+      VMagicPanel[6][(1 + sq.i)] = true;
+      Frame();
+      PAT_DELAY(100);
+      VMagicPanel[6][(1 + sq.i)] = false;
     }
-    for(int i=0; i<4; i++){
-      VMagicPanel[7-(2+i)][6]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(150);
-      VMagicPanel[7-(2+i)][6]=false;
+    for (sq.i = 0; sq.i < 4; sq.i++) {
+      VMagicPanel[7 - (2 + sq.i)][6] = true;
+      Frame();
+      PAT_DELAY(150);
+      VMagicPanel[7 - (2 + sq.i)][6] = false;
     }
   }
+  CO_END(patPC);
 }
 
-void TwoLoop(int Repeats){
-  for(int j=0; j<Repeats; j++){
-    for(int i=0; i<6; i++){
-      VMagicPanel[1][7-(1+i)]=true;
-      VMagicPanel[6][(1+i)]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(100);
-      VMagicPanel[1][7-(1+i)]=false;
-      VMagicPanel[6][(1+i)]=false;
+bool TwoLoop(int Repeats) {
+  CO_BEGIN(patPC);
+  for (sq.j = 0; sq.j < Repeats; sq.j++) {
+    for (sq.i = 0; sq.i < 6; sq.i++) {
+      VMagicPanel[1][7 - (1 + sq.i)] = true;
+      VMagicPanel[6][(1 + sq.i)] = true;
+      Frame();
+      PAT_DELAY(100);
+      VMagicPanel[1][7 - (1 + sq.i)] = false;
+      VMagicPanel[6][(1 + sq.i)] = false;
     }
-    for(int i=0; i<4; i++){
-      VMagicPanel[2+i][1]=true;
-      VMagicPanel[7-(2+i)][6]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(150);
-      VMagicPanel[2+i][1]=false;
-      VMagicPanel[7-(2+i)][6]=false;
+    for (sq.i = 0; sq.i < 4; sq.i++) {
+      VMagicPanel[2 + sq.i][1] = true;
+      VMagicPanel[7 - (2 + sq.i)][6] = true;
+      Frame();
+      PAT_DELAY(150);
+      VMagicPanel[2 + sq.i][1] = false;
+      VMagicPanel[7 - (2 + sq.i)][6] = false;
     }
-    for(int i=0; i<6; i++){
-      VMagicPanel[6][(1+i)]=true;
-      VMagicPanel[1][7-(1+i)]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(100);
-      VMagicPanel[6][(1+i)]=false;
-      VMagicPanel[1][7-(1+i)]=false;
+    for (sq.i = 0; sq.i < 6; sq.i++) {
+      VMagicPanel[6][(1 + sq.i)] = true;
+      VMagicPanel[1][7 - (1 + sq.i)] = true;
+      Frame();
+      PAT_DELAY(100);
+      VMagicPanel[6][(1 + sq.i)] = false;
+      VMagicPanel[1][7 - (1 + sq.i)] = false;
     }
-    for(int i=0; i<4; i++){
-      VMagicPanel[7-(2+i)][6]=true;
-      VMagicPanel[2+i][1]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(150);
-      VMagicPanel[7-(2+i)][6]=false;
-      VMagicPanel[2+i][1]=false;
+    for (sq.i = 0; sq.i < 4; sq.i++) {
+      VMagicPanel[7 - (2 + sq.i)][6] = true;
+      VMagicPanel[2 + sq.i][1] = true;
+      Frame();
+      PAT_DELAY(150);
+      VMagicPanel[7 - (2 + sq.i)][6] = false;
+      VMagicPanel[2 + sq.i][1] = false;
     }
   }
+  CO_END(patPC);
 }
 
-void FadeOutIn(byte type) {                                // FlthyMcNsty added a variable to this function pass a type value to allow for just a fade out sequence as well
-  for(int i=0; i<2*NumLoops; i++){
-    for(int i=0; i<16; i++){
+bool FadeOutIn(byte type) {                                // FlthyMcNsty added a variable to this function pass a type value to allow for just a fade out sequence as well
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < 2*NumLoops; sq.i++) {
+    for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
       SetRow(i, (random(256)|random(256)));
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
+    Frame();
+    PAT_DELAY(150);
   }
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
+  for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+    for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
       SetRow(i, random(256));
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
+    Frame();
+    PAT_DELAY(150);
   }
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
+  for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+    for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
       SetRow(i, (random(256)&random(256)));
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
+    Frame();
+    PAT_DELAY(150);
   }
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
+  for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+    for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
       SetRow(i, (random(256)&random(256)&random(256)));
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
+    Frame();
+    PAT_DELAY(150);
   }
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
+  for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+    for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
       SetRow(i, (random(256)&random(256)&random(256)&random(256)));
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
+    Frame();
+    PAT_DELAY(150);
   }
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
+  for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+    for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
       SetRow(i, (random(256)&random(256)&random(256)&random(256)&random(256)));
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
+    Frame();
+    PAT_DELAY(150);
   }
- ///// allOFF();
- ///// delay(1000);
- if (type == 1) {
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
-      SetRow(i, (random(256)&random(256)&random(256)&random(256)&random(256)));
+  if (type == 1) {
+    for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+      for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
+        SetRow(i, (random(256)&random(256)&random(256)&random(256)&random(256)));
+      }
+      Frame();
+      PAT_DELAY(150);
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
-  }
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
-      SetRow(i, (random(256)&random(256)&random(256)&random(256)));
+    for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+      for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
+        SetRow(i, (random(256)&random(256)&random(256)&random(256)));
+      }
+      Frame();
+      PAT_DELAY(150);
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
-  }
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
-      SetRow(i, (random(256)&random(256)&random(256)));
+    for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+      for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
+        SetRow(i, (random(256)&random(256)&random(256)));
+      }
+      Frame();
+      PAT_DELAY(150);
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
-  }
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
-      SetRow(i, (random(256)&random(256)));
+    for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+      for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
+        SetRow(i, (random(256)&random(256)));
+      }
+      Frame();
+      PAT_DELAY(150);
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
-  }
-  for(int i=0; i<NumLoops; i++){
-    for(int i=0; i<16; i++){
-      SetRow(i, random(256));
+    for (sq.i = 0; sq.i < NumLoops; sq.i++) {
+      for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
+        SetRow(i, random(256));
+      }
+      Frame();
+      PAT_DELAY(150);
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
-  }
-  for(int i=0; i<2*NumLoops; i++){
-    for(int i=0; i<16; i++){
-      SetRow(i, (random(256)|random(256)));
+    for (sq.i = 0; sq.i < 2*NumLoops; sq.i++) {
+      for (int i = 0; i < 16; i++) {     // rows 8-15 land in the spill area
+        SetRow(i, (random(256)|random(256)));
+      }
+      Frame();
+      PAT_DELAY(150);
     }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150);
   }
- }
- ///// allON();
-/////  delay(2000);
+  CO_END(patPC);
 }
 
-void TheTest(int FlashDelay){
-  for(int row=0;row<8;row++) {
-    for(int col=0;col<8;col++) {
-      VMagicPanel[row][col]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(FlashDelay);
+bool TheTest(int FlashDelay) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < 8; sq.i++) {
+    for (sq.j = 0; sq.j < 8; sq.j++) {
+      VMagicPanel[sq.i][sq.j] = true;
+      Frame();
+      PAT_DELAY(FlashDelay);
     }
   }
-  for(int row=0;row<8;row++) {
-    for(int col=0;col<8;col++) {
-      VMagicPanel[row][col]=false;
-      MapBoolGrid();
-      PrintGrid();
-      delay(delaytime);
+  for (sq.i = 0; sq.i < 8; sq.i++) {
+    for (sq.j = 0; sq.j < 8; sq.j++) {
+      VMagicPanel[sq.i][sq.j] = false;
+      Frame();
+      PAT_DELAY(delaytime);
     }
   }
+  CO_END(patPC);
 }
 
-void OneTest(int FlashDelay){
-  for(int row=0;row<8;row++) {
-    for(int col=0;col<8;col++) {
-      VMagicPanel[row][col]=true;
-      MapBoolGrid();
-      PrintGrid();
-      delay(FlashDelay);
-      VMagicPanel[row][col]=false;
+bool OneTest(int FlashDelay) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < 8; sq.i++) {
+    for (sq.j = 0; sq.j < 8; sq.j++) {
+      VMagicPanel[sq.i][sq.j] = true;
+      Frame();
+      PAT_DELAY(FlashDelay);
+      VMagicPanel[sq.i][sq.j] = false;
     }
   }
+  CO_END(patPC);
 }
 
-void Symbol(){
-  SetRow(0, B00000100);
-  SetRow(1, B00000010);
-  SetRow(2, B11111111);
-  SetRow(3, B00000000);
-  SetRow(4, B11100111);
-  SetRow(5, B00100100);
-  SetRow(6, B00100100);
-  SetRow(7, B01000010);
-  MapBoolGrid();
-  PrintGrid();
-  delay(3000);
+bool Symbol() {
+  CO_BEGIN(patPC);
+  ShowRows(B00000100, B00000010, B11111111, B00000000, B11100111, B00100100, B00100100, B01000010);
+  PAT_DELAY(3000);
+  CO_END(patPC);
 }
 
-void Cross(){
-  SetRow(0, B00000000);
-  SetRow(1, B01000010);
-  SetRow(2, B00100100);
-  SetRow(3, B00011000);
-  SetRow(4, B00011000);
-  SetRow(5, B00100100);
-  SetRow(6, B01000010);
-  SetRow(7, B00000000);
-  MapBoolGrid();
-  PrintGrid();
-  delay(3000);
+bool Cross() {
+  CO_BEGIN(patPC);
+  ShowRows(B00000000, B01000010, B00100100, B00011000, B00011000, B00100100, B01000010, B00000000);
+  PAT_DELAY(3000);
+  CO_END(patPC);
 }
 
 void MapBoolGrid(){
@@ -1015,11 +872,9 @@ void SetCol(int LEDCol, unsigned char ColState){
 }
 
 void allON() {  //all LEDs ON simple style - Huh how does this work?
-  for(int ic=0;ic<1;ic++) {
-    for(int row=0;row<8;row++) {
-      for(int col=0;col<8;col++) {
-        VMagicPanel[row][col]=true;
-      }
+  for(int row=0;row<8;row++) {
+    for(int col=0;col<8;col++) {
+      VMagicPanel[row][col]=true;
     }
   }
   MapBoolGrid();
@@ -1027,11 +882,9 @@ void allON() {  //all LEDs ON simple style - Huh how does this work?
 }
 
 void allOFF() {
-  for(int ic=0;ic<1;ic++) {
-    for(int row=0;row<8;row++) {
-      for(int col=0;col<8;col++) {
-        VMagicPanel[row][col]=false;
-      }
+  for(int row=0;row<8;row++) {
+    for(int col=0;col<8;col++) {
+      VMagicPanel[row][col]=false;
     }
   }
   MapBoolGrid();
@@ -1044,772 +897,301 @@ void allOFF() {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////
-// FlthyMcNsty Functions
+// FlthyMcNsty Functions (coroutines)
 ////////////////////////////////////////////////////////////////////////////////////////
-void allONTimed(int timer) 
-{ 
+bool allONTimed(int timer)
+{
+  CO_BEGIN(patPC);
+  allOFF();
+  for (int row = 0; row < 8; row++) {
+    SetRow(row, B11111111);
+  }
+  Frame();
+  if (timer < 1) {          // Passing a value of 0 or below turns panel on indefinately (well for 1000s anyway)
+    PAT_DELAY(1000000UL);
+  } else {
+    PAT_DELAY(timer);       // Otherwise it stays on for the number of ms passed.
+    // the original had `allOFF;` here: a no-op statement, so the panel stays on
+  }
+  CO_END(patPC);
+}
+
+bool TraceDown(int timer, byte type)
+{
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    for (sq.i = 0; sq.i < 8; sq.i++) {
+      SetRow(sq.i, B11111111);
+      Frame();
+      PAT_DELAY(200);
+      if (type == 2) {
+        SetRow(sq.i, B00000000);
+        Frame();
+      }
+    }
     allOFF();
-    for(int row=0;row<8;row++)      
-    {
-      SetRow(row, B11111111);
-    }
-    MapBoolGrid();
-    PrintGrid();
-    if (timer < 1)            // Passing a value of 0 or below turns panel on indefinately (well for 1000s anyway)
-    {
-      delay(1000000);   
-    }
-    else {
-      delay(timer);          // Otherwise it stays on for the number of ms passed.
-      allOFF;
-    }     
+    sq.r++;
+  }
+  CO_END(patPC);
 }
 
-void TraceDown(int timer, byte type)
+bool TraceUp(int timer, byte type)
 {
-  while (TraceDownTime < timer) {
-        for(int row=0;row<8;row++) 
-        {
-          SetRow(row, B11111111);
-          MapBoolGrid();
-          PrintGrid();
-          delay(200);
-          if (type == 2) {
-            SetRow(row, B00000000);
-            MapBoolGrid();
-            PrintGrid();
-          }
-        } 
-        allOFF();
-        TraceDownTime++;
-  }  
-  TraceDownTime=0;  
-}
-
-void TraceUp(int timer, byte type)
-{
-  while (TraceUpTime < timer) {
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B11111111);
-          MapBoolGrid();
-          PrintGrid();
-          delay(200);
-          if (type == 2) {
-            SetRow(row, B00000000);
-            MapBoolGrid();
-            PrintGrid();
-          }
-        }
-        allOFF(); 
-        TraceUpTime++;
-  }  
-  TraceUpTime=0;  
-}
-
-void TraceLeft(int timer, byte type)
-{
-  while (TraceLeftTime < timer) {
-       if( type== 1 ) {
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00000001);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00000011);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00000111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00001111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00011111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00111111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B01111111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B11111111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-       }  
-       else if (type == 2) {
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00000001);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00000010);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00000100);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00001000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00010000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00100000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B01000000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B10000000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-       }
-       allOFF(); 
-       TraceLeftTime++;
-  }  
-  TraceLeftTime=0;  
-}
-
-void TraceRight(int timer, byte type)
-{
-  while (TraceRightTime < timer) {
-       if( type== 1 ) {
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B10000000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B11000000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B11100000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B11110000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B11111000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B11111100);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B11111110);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B11111111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-       }  
-       else if (type == 2) {
-                for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B10000000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B01000000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00100000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00010000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00001000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00000100);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00000010);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        for(int row=7;row>=0;--row) 
-        {
-          SetRow(row, B00000001);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-       }
-       allOFF(); 
-       TraceRightTime++;
-  }  
-  TraceRightTime=0;  
-}
-
-void RandomPixel(int timer) {
-  int randRow;
-  int randCol;
-  while (RandomPixelTime < timer) {
-    randRow = random(0,7);
-    randCol = random(0,7);
-    switch(randCol)
-      {
-        case 0:              
-        {    
-          SetRow(randRow, B10000000);
-          break;
-        }
-        case 1:              
-        {    
-          SetRow(randRow, B01000000);
-          break;
-        }
-        case 2:              
-        {    
-          SetRow(randRow, B00100000);
-          break;
-        }
-        case 3:              
-        {    
-          SetRow(randRow, B00010000);
-          break;
-        }
-        case 4:              
-        {    
-          SetRow(randRow, B00001000);
-          break;
-        }
-        case 5:              
-        {    
-          SetRow(randRow, B00000100);
-          break;
-        }
-        case 6:              
-        {    
-          SetRow(randRow, B00000010);
-          break;
-        }
-        case 7:              
-        {    
-          SetRow(randRow, B00000001);
-          break;
-        }
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    for (sq.i = 7; sq.i >= 0; --sq.i) {
+      SetRow(sq.i, B11111111);
+      Frame();
+      PAT_DELAY(200);
+      if (type == 2) {
+        SetRow(sq.i, B00000000);
+        Frame();
       }
-    MapBoolGrid();
-    PrintGrid();
-    delay(150); 
+    }
     allOFF();
-    RandomPixelTime++;
-  }  
-  RandomPixelTime=0;  
+    sq.r++;
+  }
+  CO_END(patPC);
 }
-void Quadrant(int timer, byte type)
+
+// TraceLeft/TraceRight: the original unrolls 8 frames; frame k sets every row to one mask.
+// Left, type 1: 0x01, 0x03 ... 0xFF; type 2: 0x01, 0x02 ... 0x80.
+// Right, type 1: 0x80, 0xC0 ... 0xFF; type 2: 0x80, 0x40 ... 0x01.
+void SetAllRows(byte mask) {
+  for (int row = 7; row >= 0; --row) {
+    SetRow(row, mask);
+  }
+}
+
+bool TraceLeft(int timer, byte type)
 {
-  while (QuadrantTime < timer) {
-    if ( type == 1 ) {
-        for(int row=0;row<4;row++) {
-          SetRow(row, B11110000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200); 
-        for(int row=0;row<4;row++) {
-          SetRow(row, B00001111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        allOFF();
-        for(int row=4;row<8;row++) {
-          SetRow(row, B11110000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200); 
-        for(int row=4;row<8;row++) {
-          SetRow(row, B00001111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);    
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    if (type == 1 || type == 2) {
+      for (sq.i = 0; sq.i < 8; sq.i++) {
+        SetAllRows(type == 1 ? (byte)((2 << sq.i) - 1) : (byte)(1 << sq.i));
+        Frame();
+        PAT_DELAY(200);
+      }
     }
-    else if ( type == 2 ) {
-        for(int row=0;row<4;row++) {
-          SetRow(row, B00001111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200); 
-        for(int row=0;row<4;row++) {
-          SetRow(row, B11110000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        allOFF();
-        for(int row=4;row<8;row++) {
-          SetRow(row, B00001111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200); 
-        for(int row=4;row<8;row++) {
-          SetRow(row, B11110000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200); 
-    }
-    else if ( type == 3 ) {
-        for(int row=0;row<4;row++) {
-          SetRow(row, B00001111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        allOFF();
-        for(int row=4;row<8;row++) {
-          SetRow(row, B00001111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        allOFF();
-        for(int row=4;row<8;row++) {
-          SetRow(row, B11110000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        allOFF();  
-        for(int row=0;row<4;row++) {
-          SetRow(row, B11110000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-    }
-    else if ( type == 4 ) {
-        for(int row=0;row<4;row++) {
-          SetRow(row, B11110000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        allOFF();
-        for(int row=4;row<8;row++) {
-          SetRow(row, B11110000);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200); 
-        allOFF();
-        for(int row=4;row<8;row++) {
-          SetRow(row, B00001111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        allOFF(); 
-        for(int row=0;row<4;row++) {
-          SetRow(row, B00001111);
-        }
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-    }   
     allOFF();
-    QuadrantTime++;
-  }  
-  QuadrantTime=0;  
+    sq.r++;
+  }
+  CO_END(patPC);
 }
 
-void Toggle(int timer)
+bool TraceRight(int timer, byte type)
 {
-  while (ToggleTime < timer) {
-        for(int row=0;row<4;row++) 
-        {
-          SetRow(row, B11111111);
-        }
-        for(int row=4;row<8;row++) 
-        {
-          SetRow(row, B00000000);
-        } 
-        MapBoolGrid();
-        PrintGrid();
-        delay(500);
-        for(int row=0;row<4;row++) 
-        {
-          SetRow(row, B00000000);
-        }
-        for(int row=4;row<8;row++) 
-        {
-          SetRow(row, B11111111);
-        } 
-        MapBoolGrid();
-        PrintGrid();
-        delay(500); 
-        ToggleTime++;
-  }  
-  ToggleTime=0;  
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    if (type == 1 || type == 2) {
+      for (sq.i = 0; sq.i < 8; sq.i++) {
+        SetAllRows(type == 1 ? (byte)(0xFF << (7 - sq.i)) : (byte)(0x80 >> sq.i));
+        Frame();
+        PAT_DELAY(200);
+      }
+    }
+    allOFF();
+    sq.r++;
+  }
+  CO_END(patPC);
 }
 
-void Alert(int timer)
+bool RandomPixel(int timer) {
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    {                                                   // scope ends before the yield below
+      int randRow = random(0,7);
+      int randCol = random(0,7);
+      SetRow(randRow, (byte)(B10000000 >> randCol));   // the original's switch: col c -> bit 7-c
+    }
+    Frame();
+    PAT_DELAY(150);
+    allOFF();
+    sq.r++;
+  }
+  CO_END(patPC);
+}
+
+// Quadrant helpers: rows 0-3 (top) or 4-7 (bottom) set to a nibble mask.
+void SetTop(byte mask)    { for (int row = 0; row < 4; row++) SetRow(row, mask); }
+void SetBottom(byte mask) { for (int row = 4; row < 8; row++) SetRow(row, mask); }
+
+bool Quadrant(int timer, byte type)
 {
-    while (AlertTime < timer) {
-        for(int row=0;row<8;row++) 
-        allON();
-        delay(250);
-        allOFF();
-        delay(250); 
-        AlertTime++;
-  }  
-  AlertTime=0;  
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    if (type == 1) {
+      SetTop(B11110000);    Frame(); PAT_DELAY(200);
+      SetTop(B00001111);    Frame(); PAT_DELAY(200);
+      allOFF();
+      SetBottom(B11110000); Frame(); PAT_DELAY(200);
+      SetBottom(B00001111); Frame(); PAT_DELAY(200);
+    }
+    else if (type == 2) {
+      SetTop(B00001111);    Frame(); PAT_DELAY(200);
+      SetTop(B11110000);    Frame(); PAT_DELAY(200);
+      allOFF();
+      SetBottom(B00001111); Frame(); PAT_DELAY(200);
+      SetBottom(B11110000); Frame(); PAT_DELAY(200);
+    }
+    else if (type == 3) {
+      SetTop(B00001111);    Frame(); PAT_DELAY(200);
+      allOFF();
+      SetBottom(B00001111); Frame(); PAT_DELAY(200);
+      allOFF();
+      SetBottom(B11110000); Frame(); PAT_DELAY(200);
+      allOFF();
+      SetTop(B11110000);    Frame(); PAT_DELAY(200);
+    }
+    else if (type == 4) {
+      SetTop(B11110000);    Frame(); PAT_DELAY(200);
+      allOFF();
+      SetBottom(B11110000); Frame(); PAT_DELAY(200);
+      allOFF();
+      SetBottom(B00001111); Frame(); PAT_DELAY(200);
+      allOFF();
+      SetTop(B00001111);    Frame(); PAT_DELAY(200);
+    }
+    allOFF();
+    sq.r++;
+  }
+  CO_END(patPC);
 }
 
-void Expand(int timer, byte type)
+bool Toggle(int timer)
 {
-    while (ExpandTime < timer) { 
-      if(type == 1) {   
-        SetRow(0, B00000000);
-        SetRow(1, B00000000);
-        SetRow(2, B00000000);
-        SetRow(3, B00011000);
-        SetRow(4, B00011000);
-        SetRow(5, B00000000);
-        SetRow(6, B00000000);
-        SetRow(7, B00000000);  
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B00000000);
-        SetRow(1, B00000000);
-        SetRow(2, B00111100);
-        SetRow(3, B00111100);
-        SetRow(4, B00111100);
-        SetRow(5, B00111100);
-        SetRow(6, B00000000);
-        SetRow(7, B00000000);   
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B00000000);
-        SetRow(1, B01111110);
-        SetRow(2, B01111110);
-        SetRow(3, B01111110);
-        SetRow(4, B01111110);
-        SetRow(5, B01111110);
-        SetRow(6, B01111110);
-        SetRow(7, B00000000);      
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        allON();
-        delay(200);
-      }
-      else if (type == 2) {
-        SetRow(0, B00000000);
-        SetRow(1, B00000000);
-        SetRow(2, B00000000);
-        SetRow(3, B00011000);
-        SetRow(4, B00011000);
-        SetRow(5, B00000000);
-        SetRow(6, B00000000);
-        SetRow(7, B00000000);      
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B00000000);
-        SetRow(1, B00000000);
-        SetRow(2, B00111100);
-        SetRow(3, B00100100);
-        SetRow(4, B00100100);
-        SetRow(5, B00111100);
-        SetRow(6, B00000000);
-        SetRow(7, B00000000);      
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B00000000);
-        SetRow(1, B01111110);
-        SetRow(2, B01000010);
-        SetRow(3, B01000010);
-        SetRow(4, B01000010);
-        SetRow(5, B01000010);
-        SetRow(6, B01111110);
-        SetRow(7, B00000000);      
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B11111111);
-        SetRow(1, B10000001);
-        SetRow(2, B10000001);
-        SetRow(3, B10000001);
-        SetRow(4, B10000001);
-        SetRow(5, B10000001);
-        SetRow(6, B10000001);
-        SetRow(7, B11111111);      
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-      }
-        allOFF();
-        delay(200); 
-        ExpandTime++;
-  }  
-  ExpandTime=0;  
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    SetTop(B11111111); SetBottom(B00000000);
+    Frame();
+    PAT_DELAY(500);
+    SetTop(B00000000); SetBottom(B11111111);
+    Frame();
+    PAT_DELAY(500);
+    sq.r++;
+  }
+  CO_END(patPC);
 }
 
-void Compress(int timer, byte type)
+bool Alert(int timer)
 {
-    while (CompressTime < timer) {
-      if(type == 1) { 
-        allON();
-        delay(200);  
-        SetRow(0, B00000000);
-        SetRow(1, B01111110);
-        SetRow(2, B01111110);
-        SetRow(3, B01111110);
-        SetRow(4, B01111110);
-        SetRow(5, B01111110);
-        SetRow(6, B01111110);
-        SetRow(7, B00000000);      
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B00000000);
-        SetRow(1, B00000000);
-        SetRow(2, B00111100);
-        SetRow(3, B00111100);
-        SetRow(4, B00111100);
-        SetRow(5, B00111100);
-        SetRow(6, B00000000);
-        SetRow(7, B00000000);      
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B00000000);
-        SetRow(1, B00000000);
-        SetRow(2, B00000000);
-        SetRow(3, B00011000);
-        SetRow(4, B00011000);
-        SetRow(5, B00000000);
-        SetRow(6, B00000000);
-        SetRow(7, B00000000);       
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-      }
-      else if (type == 2) {
-        SetRow(0, B11111111);
-        SetRow(1, B10000001);
-        SetRow(2, B10000001);
-        SetRow(3, B10000001);
-        SetRow(4, B10000001);
-        SetRow(5, B10000001);
-        SetRow(6, B10000001);
-        SetRow(7, B11111111);         
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B00000000);
-        SetRow(1, B01111110);
-        SetRow(2, B01000010);
-        SetRow(3, B01000010);
-        SetRow(4, B01000010);
-        SetRow(5, B01000010);
-        SetRow(6, B01111110);
-        SetRow(7, B00000000);     
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B00000000);
-        SetRow(1, B00000000);
-        SetRow(2, B00111100);
-        SetRow(3, B00100100);
-        SetRow(4, B00100100);
-        SetRow(5, B00111100);
-        SetRow(6, B00000000);
-        SetRow(7, B00000000);     
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);
-        SetRow(0, B00000000);
-        SetRow(1, B00000000);
-        SetRow(2, B00000000);
-        SetRow(3, B00011000);
-        SetRow(4, B00011000);
-        SetRow(5, B00000000);
-        SetRow(6, B00000000);
-        SetRow(7, B00000000);      
-        MapBoolGrid();
-        PrintGrid();
-        delay(200);        
-      }
-        allOFF();
-        delay(200); 
-        CompressTime++;
-  }  
-  CompressTime=0;  
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    for (int row = 0; row < 8; row++)   // no braces in the original: allON() really runs 8 times
+      allON();
+    PAT_DELAY(250);
+    allOFF();
+    PAT_DELAY(250);
+    sq.r++;
+  }
+  CO_END(patPC);
 }
 
+bool Expand(int timer, byte type)
+{
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    if (type == 1) {
+      ShowRows(B00000000, B00000000, B00000000, B00011000, B00011000, B00000000, B00000000, B00000000);
+      PAT_DELAY(200);
+      ShowRows(B00000000, B00000000, B00111100, B00111100, B00111100, B00111100, B00000000, B00000000);
+      PAT_DELAY(200);
+      ShowRows(B00000000, B01111110, B01111110, B01111110, B01111110, B01111110, B01111110, B00000000);
+      PAT_DELAY(200);
+      allON();
+      PAT_DELAY(200);
+    }
+    else if (type == 2) {
+      ShowRows(B00000000, B00000000, B00000000, B00011000, B00011000, B00000000, B00000000, B00000000);
+      PAT_DELAY(200);
+      ShowRows(B00000000, B00000000, B00111100, B00100100, B00100100, B00111100, B00000000, B00000000);
+      PAT_DELAY(200);
+      ShowRows(B00000000, B01111110, B01000010, B01000010, B01000010, B01000010, B01111110, B00000000);
+      PAT_DELAY(200);
+      ShowRows(B11111111, B10000001, B10000001, B10000001, B10000001, B10000001, B10000001, B11111111);
+      PAT_DELAY(200);
+    }
+    allOFF();
+    PAT_DELAY(200);
+    sq.r++;
+  }
+  CO_END(patPC);
+}
 
-void MySymbol(){
-  SetRow(0, B00000000);
-  SetRow(1, B01111110);
-  SetRow(2, B00000010);
-  SetRow(3, B01111110);
-  SetRow(4, B01000000);
-  SetRow(5, B01000000);
-  SetRow(6, B01111110);
-  SetRow(7, B00000000);
-  MapBoolGrid();
-  PrintGrid();
-  delay(1000);
-  SetRow(0, B00000000);
-  SetRow(1, B01111110);
-  SetRow(2, B01000010);
-  SetRow(3, B01000000);
-  SetRow(4, B01001110);
-  SetRow(5, B01000010);
-  SetRow(6, B01111110);
-  SetRow(7, B00000000);
-  MapBoolGrid();
-  PrintGrid();
-  delay(1000);
-  SetRow(0, B00000000);
-  SetRow(1, B01000010);
-  SetRow(2, B01000010);
-  SetRow(3, B01000010);
-  SetRow(4, B01011010);
-  SetRow(5, B01100110);
-  SetRow(6, B01000010);
-  SetRow(7, B00000000);
-  MapBoolGrid();
-  PrintGrid();
-  delay(1000);
-  SetRow(0, B00000000);
-  SetRow(1, B01111100);
-  SetRow(2, B01000010);
-  SetRow(3, B01000010);
-  SetRow(4, B01000010);
-  SetRow(5, B01000010);
-  SetRow(6, B01111100);
-  SetRow(7, B00000000);
-  MapBoolGrid();
-  PrintGrid();
-  delay(1000);
+bool Compress(int timer, byte type)
+{
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    if (type == 1) {
+      allON();
+      PAT_DELAY(200);
+      ShowRows(B00000000, B01111110, B01111110, B01111110, B01111110, B01111110, B01111110, B00000000);
+      PAT_DELAY(200);
+      ShowRows(B00000000, B00000000, B00111100, B00111100, B00111100, B00111100, B00000000, B00000000);
+      PAT_DELAY(200);
+      ShowRows(B00000000, B00000000, B00000000, B00011000, B00011000, B00000000, B00000000, B00000000);
+      PAT_DELAY(200);
+    }
+    else if (type == 2) {
+      ShowRows(B11111111, B10000001, B10000001, B10000001, B10000001, B10000001, B10000001, B11111111);
+      PAT_DELAY(200);
+      ShowRows(B00000000, B01111110, B01000010, B01000010, B01000010, B01000010, B01111110, B00000000);
+      PAT_DELAY(200);
+      ShowRows(B00000000, B00000000, B00111100, B00100100, B00100100, B00111100, B00000000, B00000000);
+      PAT_DELAY(200);
+      ShowRows(B00000000, B00000000, B00000000, B00011000, B00011000, B00000000, B00000000, B00000000);
+      PAT_DELAY(200);
+    }
+    allOFF();
+    PAT_DELAY(200);
+    sq.r++;
+  }
+  CO_END(patPC);
+}
+
+bool MySymbol() {
+  CO_BEGIN(patPC);
+  ShowRows(B00000000, B01111110, B00000010, B01111110, B01000000, B01000000, B01111110, B00000000);
+  PAT_DELAY(1000);
+  ShowRows(B00000000, B01111110, B01000010, B01000000, B01001110, B01000010, B01111110, B00000000);
+  PAT_DELAY(1000);
+  ShowRows(B00000000, B01000010, B01000010, B01000010, B01011010, B01100110, B01000010, B00000000);
+  PAT_DELAY(1000);
+  ShowRows(B00000000, B01111100, B01000010, B01000010, B01000010, B01000010, B01111100, B00000000);
+  PAT_DELAY(1000);
+  CO_END(patPC);
+}
+
+bool runPattern() {
+  switch (patId) {
+    case P_EYESCAN:     return EyeScan(patA, patB);
+    case P_CYLONCOL:    return CylonCol(patA, patB);
+    case P_CYLONROW:    return CylonRow(patA, patB);
+    case P_FLASHV:      return FlashV(patA, patB);
+    case P_FLASHQ:      return FlashQ(patA, patB);
+    case P_FLASHALL:    return FlashAll(patA, patB);
+    case P_ONELOOP:     return OneLoop(patA);
+    case P_TWOLOOP:     return TwoLoop(patA);
+    case P_FADEOUTIN:   return FadeOutIn(patA);
+    case P_THETEST:     return TheTest(patA);
+    case P_ONETEST:     return OneTest(patA);
+    case P_SYMBOL:      return Symbol();
+    case P_CROSS:       return Cross();
+    case P_ALLONTIMED:  return allONTimed(patA);
+    case P_TRACEDOWN:   return TraceDown(patA, patB);
+    case P_TRACEUP:     return TraceUp(patA, patB);
+    case P_TRACELEFT:   return TraceLeft(patA, patB);
+    case P_TRACERIGHT:  return TraceRight(patA, patB);
+    case P_RANDOMPIXEL: return RandomPixel(patA);
+    case P_QUADRANT:    return Quadrant(patA, patB);
+    case P_TOGGLE:      return Toggle(patA);
+    case P_ALERT:       return Alert(patA);
+    case P_EXPAND:      return Expand(patA, patB);
+    case P_COMPRESS:    return Compress(patA, patB);
+    case P_MYSYMBOL:    return MySymbol();
+    default:            return false;
+  }
 }
 
 //////
@@ -1821,318 +1203,10 @@ void blankPANEL() {
   lc.clearDisplay(1);
 }
 
-// function that executes whenever data is received from an I2C master
-// this function is registered as an event, see setup()
+// Runs inside the TWI interrupt: only record the command; loop() acts on it. Exactly one byte is
+// read, as in the original, so a multi-byte write still leaves the receive buffer undrained and
+// deafens the receiver until reset (firmware-map 3.3; baselined as-is).
 void receiveEvent(int eventCode) {
-  RandomOnTime   = random(1000, 1500);// 8 to 12 seconds // ON Time - THIS TIME WILL CHANGE BASED ON THE SEQUENCE CALLED (For State Machine Based Functions)
-  RandomTime = 0;
-  int i2cEvent = Wire.read();
-  int event = floor(i2cEvent/1);
-  sei();
-  switch (event) {
-        case 0:              //  0 = Turns Panel Off
-        {    
-          allOFF();
-          break;
-        }
-        case 1:              //  1 = Turns Panel On Indefinately
-        {
-          allONTimed(0);
-          RandomTime = RandomOnTime + 1;  // force time to expire.
-          break;
-        }
-        case 2:              //  2 = Turns Panel on for 2s
-        {
-          allONTimed(2000);
-          RandomTime = RandomOnTime + 1;  
-        }
-        case 3:              //  3 = Turns Panel on for 5s
-        {
-          allONTimed(5000);
-          RandomTime = RandomOnTime + 1; 
-          break;
-        }
-        case 4:              //  4 = Turns Panel on for 10s
-        {
-          allONTimed(10000);
-          RandomTime = RandomOnTime + 1; 
-          break;
-        }
-        case 5:              //  5 = Begins Toggle Sequence: Top and Bottom Half of Panel Alternate
-        {
-          allOFF();
-          Toggle(10);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 6:              // 6 = Begins Alert Sequence (4s):  Panel Rapidly Flashes On & Off
-        {
-          allOFF();
-          Alert(8);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 7:              // 7 = Begins Alert Sequence (10s):  Panel Rapidly Flashes On & Off
-        {
-          allOFF();
-          Alert(20);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }         
-        case 8:              //  8 = Begins Trace Up Sequence (Type 1):  Each row of the MP lights up from bottom to top filling entire panel
-        {
-          allOFF();
-          TraceUp(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 9:              //  9 = Begins Trace Up Sequence (Type 2):  Each row of the MP lights up from bottom to top individually
-        {
-          allOFF();
-          TraceUp(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }        
-        case 10:             //  10 = Begins Trace Down Sequence (Type 1):  Each row of the MP lights up from top to bottom filling entire panel
-        {
-          allOFF();
-          TraceDown(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 11:              //  11 = Begins Trace Down Sequence (Type 2):  Each row of the MP lights up from top to bottom individually
-        {
-          allOFF();
-          TraceDown(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 12:             //  12 = Begins Trace Right Sequence (Type 1):  Each column of the MP lights up from left to right filling entire panel
-        {
-          allOFF();
-          TraceRight(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 13:              //  13 = Begins Trace Right Sequence (Type 2):  Each column of the MP lights up from left to right individually
-        {
-          allOFF();
-          TraceRight(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 14:             //  14 = Begins Trace Left Sequence (Type 1):  Each column of the MP lights up from right to left filling entire panel
-        {
-          allOFF();
-          TraceLeft(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 15:              //  15 = Begins Trace Left Sequence (Type 2):  Each column of the MP lights up from right to left individually
-        {
-          allOFF();
-          TraceLeft(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 16:              //  16 = Begins Expand Sequence (Type 1): Panel expands from center filling entire panel 
-        {
-          allOFF();
-          Expand(5,1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();  
-          break;
-        }
-        case 17:               //  17 = Begins Expand Sequence (Type 2): Ring of pixels expands from center of panel
-        {
-          allOFF();
-          Expand(5,2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();  
-          break;
-        }
-        case 18:              //  18 = Begins Compress Sequence (Type 1): Panel compresses from outer edge filling entire panel 
-        {
-          allOFF();
-          Compress(5,1); 
-          RandomTime = RandomOnTime + 1; 
-          allOFF();  
-          break;
-        }
-        case 19:               //  19 = Begins Compress Sequence (Type 2): Ring of pixels compresses from outer edge of panel
-        {
-          allOFF();
-          Compress(5,2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();  
-          break;
-        }
-
-
-        case 20:              //  20 = Begins Cross Sequence: Panel is lit to display an X for 3s
-        {
-          allOFF();
-          Cross();
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 21:              //  21 = Begins Cyclon Column Sequence: Each column illuminated one at a time from left to right back to left. (like the Cylons from Battlestar Galactica)
-        {
-          allOFF();
-          CylonCol(2, 140);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 22:              //  22 = Begins Cyclon Row Sequence: Each row illuminated one at a time from top to bottom back to top. (like the Cylons from Battlestar Galactica)
-        {
-          allOFF();
-          CylonRow(2, 140);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 23:              // 23 = Begins Eye Scan Sequence:  Each row is illuminated from top to bottom followed by each column left to right. (like the eye ball scanners in the Mission Impossible movies)
-        {
-          EyeScan(2, 100);
-          RandomTime = RandomOnTime + 1;     
-          allOFF(); 
-          break;
-        }        
-        case 24:             //  24 = Begins Fade Out/In Sequence:  MP gradually and randomly fades out and then fades back in the same manner. 
-        {
-          FadeOutIn(1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 25:             //  25 = Begins Fade Out Sequence:  MP gradually and randomly fades out (Similar to the Short Circuit Sequence on Teeces). 
-        {
-          FadeOutIn(2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }           
-        case 26:              //  26 = Begins Flash Sequence:  MP flashes rapidly for 5 seconds (Similar to Alarm Sequence)
-        {
-          FlashAll(8, 200);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 27:              //  27 = Begins Flash V Sequence: Left and Right Half of Panel Alternate
-        {
-          FlashV(8, 200);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 28:              //  28 = Begins Flash Q Sequence:  Alternating quadrants of MP flash rapidly
-        {
-          FlashQ(8, 200);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();  
-          break;
-        }
-        case 29:              //  29 = Begins Two Loop Sequence: Dual pixels are lit opposite each other completeting a loop around the 2nd ring from panel edge.
-        {
-          allOFF();
-          TwoLoop(2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 30:              //  30 = Begins One Loop Sequence: A single pixel is lit individually completeting a loop around the 2nd ring from panel edge.
-        {
-          allOFF();
-          OneLoop(2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 31:              //  31 = Begins Test Sequence (Type 1):  Each pixel of the MP is lit sequentially from row 0, column 7 to row 7, column 0 until panel is filled, then unlit in the same order.
-        {
-          allOFF();
-          TheTest(30);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 32:              //  32 = Begins Test Sequence (Type 2):  Each pixel of the MP is lit indivually from row 0, column 7 to row 7, column 0. 
-        {
-          allOFF();
-          OneTest(30);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 33:              //  33 = Begins AI Logo Sequence:  Displays the AI Aurebesh characters for 3s (...that we see all over our awesome packages from Rotopod and McWhlr) 
-        {
-          allOFF();
-          Symbol();
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 34:              //  34 = Begins 2GWD Logo Sequence: Displays the Characters 2-G-W-D sequentially every 1s (...shameless, I know.) 
-        {
-          allOFF();
-          MySymbol();
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 35:              //  35 = Begins Quadrant Sequence (Type 1):  Each Panel Quadrant lights up individually (TL, TR, BR, BL) 
-        {
-          allOFF();
-          Quadrant(5, 1);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }
-        case 36:              //  36 = Begins Quadrant Sequence (Type 2):  Each Panel Quadrant lights up individually (TR, TL, BL, BR) 
-        {
-          allOFF();
-          Quadrant(5, 2);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 37:              //  37 = Begins Quadrant Sequence (Type 3):  Each Panel Quadrant lights up individually (TR, BR, BL, TL) 
-        {
-          allOFF();
-          Quadrant(5, 3);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        } 
-        case 38:              //  38 = Begins Quadrant Sequence (Type 4):  Each Panel Quadrant lights up individually (TL, BL, BR, TR) 
-        {
-          allOFF();
-          Quadrant(5, 4);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }  
-        case 39:              //  39 = Begins Random Pixel Sequence:  Random pixels flashe individually for 6s  
-        {
-          allOFF();
-          RandomPixel(40);
-          RandomTime = RandomOnTime + 1;  
-          allOFF();
-          break;
-        }    
-     }    
+  i2cCmd = Wire.read();
+  i2cCount++;
 }

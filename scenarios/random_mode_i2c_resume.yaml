@@ -1,0 +1,14 @@
+name: random_mode_i2c_resume
+description: "Mode 6 (Random) from power-on; Cross (cmd 20) at 1 s interrupts its first pattern; after Cross the Random mode resumes in its off interval, so the panel stays off"
+firmware_reset: true
+eeprom: default
+run_ms: 6000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 0
+    gpio_set: { pin: C0, value: 0 }
+  - at_ms: 0
+    gpio_set: { pin: C1, value: 0 }
+  - at_ms: 1000
+    i2c_write: { addr: 0x14, bytes: [20] }

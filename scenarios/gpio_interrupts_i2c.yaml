@@ -1,0 +1,12 @@
+name: gpio_interrupts_i2c
+description: "Toggle (cmd 5) running, then C1 goes low at 2 s: after the 20 ms debounce the panel blanks and mode 2 (FlashAll, looping) replaces Toggle"
+firmware_reset: true
+eeprom: default
+run_ms: 6000
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+steps:
+  - at_ms: 100
+    i2c_write: { addr: 0x14, bytes: [5] }
+  - at_ms: 2000
+    gpio_set: { pin: C1, value: 0 }

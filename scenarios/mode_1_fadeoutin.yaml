@@ -3,6 +3,8 @@ description: "Jumper/rotary mode 1 (C2 low at power-on): FadeOutIn(1) repeating"
 firmware_reset: true
 eeprom: default
 run_ms: 9900
+timing_tolerance_cycles: 8000
+timing_tolerance_reason: "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
 steps:
   - at_ms: 0
     gpio_set: { pin: C2, value: 0 }

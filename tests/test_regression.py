@@ -1,5 +1,6 @@
 """Every scenario, run against build/firmware.elf, must match its committed baseline exactly."""
 from __future__ import annotations
+import json
 import pytest
 from conftest import mplib, scenario_names
 from compare import compare
@@ -16,3 +17,8 @@ def test_scenario_matches_baseline(name: str, firmware, harness):
     ok, report, result = compare(name, out, base)
     (out / "diff_report.md").write_text(report)
     assert ok, f"{name} diverges from baseline; report: {out / 'diff_report.md'}\n{report[:3000]}"
+    # D-19: animations run from loop(), never inside the TWI ISR, so no command may ever interrupt
+    # a MAX7221 burst mid-way (the specimen did this in i2c_back_to_back).
+    diags = json.loads((out / "summary.json").read_text()).get("diagnostics", [])
+    malformed = [d for d in diags if d.get("kind") == "malformed_burst"]
+    assert not malformed, f"{name}: {len(malformed)} malformed MAX7221 burst(s), first {malformed[0]}"
