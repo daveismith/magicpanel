@@ -26,7 +26,7 @@
 #include "i2c_master.h"
 #include "vcd.h"
 
-#define HARNESS_VERSION "0.1.0"
+#define HARNESS_VERSION "0.2.0"   /* 0.2: panel orientation per hardware (A-1) */
 #define F_CPU_HZ 16000000ULL
 #define MS_TO_CYCLES(ms) ((avr_cycle_count_t)(ms) * (F_CPU_HZ / 1000ULL))
 

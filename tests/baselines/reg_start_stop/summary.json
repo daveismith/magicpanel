@@ -9,23 +9,24 @@
     "elf": {
       "absolute_repo_path_in_elf": false,
       "deterministic": true,
-      "elf_sha256": "2cd4e633fd7501216048887c18192f630b64e0b718e2b1d366a09ebe12470425",
-      "flash_bytes": 21070,
-      "flash_sha256": "a160129b16f27cf186477b1f56fbba69e64dce4e0e4d8aca8492c6c08cbaeff5",
+      "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
+      "flash_bytes": 21202,
+      "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a",
+      "hex_sha256": "f1553b881d0a1fa9c4fa22623fe80f4e75bb8ae74431711d49ae47d97ad5e096",
       "path": "build/firmware.elf",
       "second_build": {
-        "elf_sha256": "2cd4e633fd7501216048887c18192f630b64e0b718e2b1d366a09ebe12470425",
-        "flash_sha256": "a160129b16f27cf186477b1f56fbba69e64dce4e0e4d8aca8492c6c08cbaeff5"
+        "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
+        "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a"
       }
     },
     "firmware_git": {
       "dirty": true,
-      "sha": "16f124d0454ec02f50c765d7597812432dbf8d1a"
+      "sha": "e0f46c2ca08deb42ff1ac91e0eec827873a0ce16"
     },
     "sketch": {
-      "bytes": 56852,
+      "bytes": 57684,
       "path": "MagicPanel.ino",
-      "sha256": "40d9f9f5c9e474b3e3603ff68b51259e7b1fc0ceb22da0a65a09e155af745088"
+      "sha256": "8588c3784ef79875514a5e00f41172e94d2f8029e61bfecf9494fcc7459d2d42"
     },
     "toolchain": {
       "arduino_cli_commit": "01f3d4f2b",
@@ -52,7 +53,7 @@
       }
     }
   },
-  "canonical_hash": "d9d78f19d44beadda0c83ef48b0c73c0d2141461e407e7e127b23252a21d3fc6",
+  "canonical_hash": "c3397f2ef3c96ed33ff176ccf2b8818d1d5c2fe225dfb93d32b50fd90dc162fd",
   "counts": {
     "display_changes": 159,
     "empty_latches": 1,
@@ -113,9 +114,9 @@
   },
   "firmware": {
     "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
-    "elf_sha256": "2cd4e633fd7501216048887c18192f630b64e0b718e2b1d366a09ebe12470425"
+    "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce"
   },
-  "harness_version": "0.1.0",
+  "harness_version": "0.2.0",
   "markers": [
     {
       "cycle": 1600001,
@@ -133,8 +134,8 @@
       "text": "reg 0x21 STOP [1]"
     },
     {
-      "cycle": 64000002,
-      "ns": 4000000125.0,
+      "cycle": 64000000,
+      "ns": 4000000000.0,
       "text": "reg 0x21 STOP [0]"
     }
   ],
@@ -152,9 +153,9 @@
   "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-reg_start_stop/stimulus.script",
   "settled_hash": "85270f8e70b506818784ff742eeec2d08652c95212884eb300cf7a8726dbdaa9",
   "settled_states": 16,
-  "settled_timing_hash": "ec3b1e22c4ab3347cdf3e25f8b5dcf3de4da6ae2ab1a41e4718473ce7f8f0098",
+  "settled_timing_hash": "533847435ad787602540aa6858a8186b4afcd89420b430b63cc89433317d7c7c",
   "status": "ok",
-  "timing_hash": "cc5a532b87edf7edefaa98be2ba87c0d2b8864dd0fd7d4248ba3806b1a5166ef",
-  "total_cycles": 72000001,
-  "total_ns": 4500000062.5
+  "timing_hash": "fecf72382fccc5382d437f8b3a24ebe3214505c0dcf2883d41163bbec2f48a4a",
+  "total_cycles": 72000000,
+  "total_ns": 4500000000.0
 }

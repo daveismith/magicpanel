@@ -7,9 +7,9 @@ How a firmware release is cut and how its documentation is published. The pipeli
 
 | Thing | Example | Where it comes from |
 |---|---|---|
-| Firmware version | `0.11.0` | `FW_MAJOR/FW_MINOR/FW_PATCH` in `MagicPanel.ino`, readable over I2C |
-| Release tag | `v0.11.0` | must equal the firmware version (checked by `tools/check_version.py`) |
-| Docs version | `0.11` | `MAJOR.MINOR`: a patch release updates its minor's docs in place |
+| Firmware version | `0.12.0` | `FW_MAJOR/FW_MINOR/FW_PATCH` in `MagicPanel.ino`, readable over I2C |
+| Release tag | `v0.12.0` | must equal the firmware version (checked by `tools/check_version.py`) |
+| Docs version | `0.12` | `MAJOR.MINOR`: a patch release updates its minor's docs in place |
 | Pre-release | `v0.12.0-rc1` → docs `0.12-rc` | published, but `latest` does not move |
 
 The site has one directory per docs version on the `gh-pages` branch (managed by mike), plus:
@@ -43,12 +43,12 @@ The release workflow then:
 
 ## Trying the pipeline
 
-Push a pre-release tag such as `v0.11.0-rc1`. It publishes docs `0.11-rc` and a pre-release
+Push a pre-release tag such as `v0.12.0-rc1`. It publishes docs `0.12-rc` and a pre-release
 without touching `latest`. To remove it afterwards:
 
 ```sh
-.venv/bin/mike delete --push 0.11-rc
-gh release delete v0.11.0-rc1 --cleanup-tag
+.venv/bin/mike delete --push 0.12-rc
+gh release delete v0.12.0-rc1 --cleanup-tag
 ```
 
 ## Previewing locally
@@ -56,7 +56,7 @@ gh release delete v0.11.0-rc1 --cleanup-tag
 ```sh
 make docs-setup                 # once
 make docs-gen docs-serve        # live preview of the current tree
-.venv/bin/mike deploy --alias-type redirect --update-aliases 0.11 latest && .venv/bin/mike deploy dev   # local gh-pages only (no --push)
+.venv/bin/mike deploy --alias-type redirect --update-aliases 0.12 latest && .venv/bin/mike deploy dev   # local gh-pages only (no --push)
 make docs-preview-versions      # the version switcher over the local gh-pages branch
 ```
 
@@ -78,5 +78,5 @@ After the first deploy has created the `gh-pages` branch, set *Settings → Page
 4. Set `site_url` in `mkdocs.yml` to the new address, then merge. The next `dev` deploy and every
    release after it use it.
 
-Version paths (`/0.11/…`) stay the same, and the old `github.io` addresses redirect
+Version paths (`/0.12/…`) stay the same, and the old `github.io` addresses redirect
 automatically.

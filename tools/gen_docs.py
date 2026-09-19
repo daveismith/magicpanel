@@ -7,7 +7,7 @@ code runs. Each sequence is then started and recorded, and rendered as a GIF plu
 frame file for the interactive player (manual/js/panel-player.js).
 
   tools/gen_docs.py [--elf build/firmware.elf] [--out manual/generated] [--only 20,26]
-                    [--release-tag v0.11.0]
+                    [--release-tag v0.12.0]
 
 Writes (all gitignored, rebuilt from the ELF; output is deterministic):
   <out>/version.md                     one line naming the firmware and protocol version

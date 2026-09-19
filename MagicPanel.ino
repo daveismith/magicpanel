@@ -1,8 +1,10 @@
 // Magic Panel FX by IA-PARTS.com 
 //
 //// Release History
-// v011.0 - I2C register interface (docs/i2c-protocol.md): start/stop/status/catalogue/brightness,
-//          legacy one-byte commands kept; every animation runs from loop()
+// v012.0 - I2C register interface (docs/i2c-protocol.md): start/stop/status/catalogue/brightness,
+//          legacy one-byte commands kept; every animation runs from loop(); the picture is turned
+//          180 degrees so patterns appear the right way up (CONFIG bit 3 restores v010.5's).
+//          (v011 is skipped: that number is used by another Magic Panel firmware.)
 // v010.5 - Re-added Working I2C and additional display sequences  (FlthyMcNsty 05-21-2014)
 // v010 - Remove I2C code and clean up
 // v009 - Combine Big Happy Dude functions to v008 + allow for 3 pin binary input
@@ -86,7 +88,7 @@ int NumLoops=2;
 #define PROTO_MAJOR 1
 #define PROTO_MINOR 0
 #define FW_MAJOR    0
-#define FW_MINOR    11
+#define FW_MINOR    12
 #define FW_PATCH    0
 #define CAPS        0x1F          // legacy, repeat, brightness, names, EEPROM config
 #define REG_BIT     0x80
@@ -102,7 +104,8 @@ int NumLoops=2;
 #define CFG_LEGACY       0x01
 #define CFG_GPIO_ENABLE  0x02
 #define CFG_GPIO_RESUME  0x04
-#define CFG_VALID        0x07
+#define CFG_ORIENT_V010  0x08     // draw as v010.5 did (rotated 180 degrees on a normally mounted panel)
+#define CFG_VALID        0x0F
 #define CFG_DEFAULT      0x07
 #define SAVE_MAGIC       0xA5
 #define FACTORY_MAGIC    0x5A
@@ -349,20 +352,20 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { INFO_ENDS_LIT | INFO_HOLD,  5015,    "On 5s" },
   { INFO_ENDS_LIT | INFO_HOLD,  10016,   "On 10s" },
   { 0,                          10172,   "Toggle" },
-  { 0,                          4569,    "Alert" },
-  { 0,                          11398,   "Alert long" },
-  { 0,                          8359,    "Trace up" },
-  { 0,                          8668,    "Trace up line" },
-  { 0,                          8359,    "Trace down" },
-  { 0,                          8668,    "Trace down line" },
+  { 0,                          4570,    "Alert" },
+  { 0,                          11400,   "Alert long" },
+  { 0,                          8360,    "Trace up" },
+  { 0,                          8669,    "Trace up line" },
+  { 0,                          8360,    "Trace down" },
+  { 0,                          8669,    "Trace down line" },
   { 0,                          8365,    "Trace right" },
   { 0,                          8365,    "Trace right line" },
   { 0,                          8365,    "Trace left" },
   { 0,                          8365,    "Trace left line" },
   { 0,                          5213,    "Expand" },
-  { 0,                          5213,    "Expand ring" },
+  { 0,                          5214,    "Expand ring" },
   { 0,                          5213,    "Compress" },
-  { 0,                          5213,    "Compress ring" },
+  { 0,                          5214,    "Compress ring" },
   { INFO_HOLD,                  3024,    "Cross" },
   { 0,                          4150,    "Cylon column" },
   { 0,                          4150,    "Cylon row" },
@@ -374,7 +377,7 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { 0,                          3337,    "Flash quadrants" },
   { 0,                          5122,    "Two loop" },
   { 0,                          5122,    "One loop" },
-  { 0,                          4837,    "Test fill" },
+  { 0,                          4838,    "Test fill" },
   { 0,                          2427,    "Test pixel" },
   { INFO_HOLD,                  3024,    "Symbol AI" },
   { INFO_HOLD,                  4047,    "Symbol 2GWD" },
@@ -382,7 +385,7 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { 0,                          4247,    "Quadrant 2" },
   { 0,                          4323,    "Quadrant 3" },
   { 0,                          4323,    "Quadrant 4" },
-  { INFO_RANDOM,                6636,    "Random pixel" },
+  { INFO_RANDOM,                6638,    "Random pixel" },
   { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show" },
   { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show long" },
 };
@@ -1047,10 +1050,22 @@ bool Cross() {
   CO_END(patPC);
 }
 
+// VMagicPanel[row][col] is the picture as seen: row 0 at the top, col 7 at the left. The panel is
+// mounted with register row 0 at the BOTTOM and register bit 7 at the RIGHT (A-1, checked on
+// hardware), so each row goes to register row 7-row with its bits reversed. v010.5 wrote rows
+// unturned, which shows every pattern rotated 180 degrees; CONFIG bit 3 (CFG_ORIENT_V010) keeps that.
 void MapBoolGrid(){
+  bool v010 = cfgConfig & CFG_ORIENT_V010;
   for(int Row=0; Row<8; Row++){
-    MagicPanel[2*Row]=128*VMagicPanel[Row][7]+64*VMagicPanel[Row][6]+32*VMagicPanel[Row][5]+16*VMagicPanel[Row][4];       // 0, 2, 4, 6, 8, 10, 12, 14
-    MagicPanel[2*Row+1]=8*VMagicPanel[Row][3]+4*VMagicPanel[Row][2]+2*VMagicPanel[Row][1]+VMagicPanel[Row][0];            // 1, 3, 5, 7, 9, 11, 13, 15
+    const boolean* v = VMagicPanel[Row];
+    if (v010) {
+      MagicPanel[2*Row]=128*v[7]+64*v[6]+32*v[5]+16*v[4];       // 0, 2, 4, 6, 8, 10, 12, 14
+      MagicPanel[2*Row+1]=8*v[3]+4*v[2]+2*v[1]+v[0];            // 1, 3, 5, 7, 9, 11, 13, 15
+    } else {
+      byte r = 7 - Row;
+      MagicPanel[2*r]=128*v[0]+64*v[1]+32*v[2]+16*v[3];
+      MagicPanel[2*r+1]=8*v[4]+4*v[5]+2*v[6]+v[7];
+    }
   }
 }
 

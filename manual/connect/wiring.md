@@ -46,6 +46,8 @@ has been steady for 20 ms, so turning the switch through other positions does no
 
 ## Orientation
 
-Row 0 is the top of the panel. The leftmost column is bit 7 of each row. Left and right have not
-yet been checked on hardware; if your panel shows patterns mirrored, please
-[open an issue](https://github.com/daveismith/magicpanel/issues).
+This firmware draws patterns the right way up on a normally mounted panel: *Trace down* runs top
+to bottom and *Test pixel* starts at the top right. Firmware v010.5 drew everything rotated 180°.
+If your panel is mounted the other way round, set `CONFIG` bit 3 to rotate the picture back
+(write `[0xB0, 0x0F]`, then `[0xBF, 0xA5]` to keep it; see
+[configuration](../reference/i2c-protocol.md#7-configuration-0x300x3f)).

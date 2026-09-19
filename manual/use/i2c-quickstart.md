@@ -16,8 +16,8 @@ and C++ are in [`magicpanel_i2c.h`](../reference/magicpanel_i2c.h).
 Write the register pointer `0x80` (identity), then read 10 bytes:
 
 ```
-write [0x80]   read 10  ->  4D 50 01 00 00 0B 00 2A 1F 14
-                            "MP" protocol 1.0, firmware 0.11.0, 42 sequences
+write [0x80]   read 10  ->  4D 50 01 00 00 0C 00 2A 1F 14
+                            "MP" protocol 1.0, firmware 0.12.0, 42 sequences
 ```
 
 If you read `00 00 …`, the panel runs firmware v010.5 or older: only one-byte commands work.

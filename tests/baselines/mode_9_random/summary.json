@@ -9,29 +9,24 @@
     "elf": {
       "absolute_repo_path_in_elf": false,
       "deterministic": true,
-      "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
-      "flash_bytes": 13700,
-      "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
+      "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
+      "flash_bytes": 21202,
+      "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a",
+      "hex_sha256": "f1553b881d0a1fa9c4fa22623fe80f4e75bb8ae74431711d49ae47d97ad5e096",
       "path": "build/firmware.elf",
-      "reference": {
-        "elf_sha256": "36099b3475506f998d7c7374fa53c522d365db38452210c0f321c91da0414966",
-        "flash_matches": true,
-        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
-        "path": "/Users/davids/Documents/Source/git/magicpanel/MagicPanel_v010_5.ino.elf"
-      },
       "second_build": {
-        "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
-        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a"
+        "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
+        "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a"
       }
     },
     "firmware_git": {
-      "dirty": false,
-      "sha": "8508e6277dd7546abf7d9ccd8ffe422367f4055b"
+      "dirty": true,
+      "sha": "e0f46c2ca08deb42ff1ac91e0eec827873a0ce16"
     },
     "sketch": {
-      "bytes": 57565,
-      "path": "MagicPanel_v010_5.ino",
-      "sha256": "f213fd7a68dd00307d1231cb648f2f7b223c4232dbc9780440ecc2253de6b638"
+      "bytes": 57684,
+      "path": "MagicPanel.ino",
+      "sha256": "8588c3784ef79875514a5e00f41172e94d2f8029e61bfecf9494fcc7459d2d42"
     },
     "toolchain": {
       "arduino_cli_commit": "01f3d4f2b",
@@ -58,15 +53,15 @@
       }
     }
   },
-  "canonical_hash": "f9bf8cea9d14e1fe56ab673b53aa23acf23dc14e03c20c5d4d841504a0083c6e",
+  "canonical_hash": "ec544495a866021c06d48fd7887987cc3909fbf21912ab7a2eb887e29d9bf202",
   "counts": {
     "display_changes": 271,
     "empty_latches": 1,
     "events": 4,
-    "frames": 92500,
+    "frames": 92304,
     "gpio_changes": 8,
     "i2c_transactions": 0,
-    "latches": 46250,
+    "latches": 46152,
     "malformed_bursts": 0,
     "script_steps": 2
   },
@@ -119,9 +114,9 @@
   },
   "firmware": {
     "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
-    "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb"
+    "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce"
   },
-  "harness_version": "0.1.0",
+  "harness_version": "0.2.0",
   "markers": [
     {
       "cycle": 0,
@@ -131,16 +126,21 @@
   ],
   "mcu": "atmega328p",
   "scenario": {
+    "compare_mode": "settled",
     "description": "Jumper/rotary mode 9 (B5 low at power-on): Random(8000..14000) jumper 2",
     "name": "mode_9_random",
     "run_ms": 26300,
-    "sha256": "96fcb3bcad2df13604a9dda4868ccecd234c44c4f302b18e00fbf307fe36d52c",
-    "timing_tolerance_cycles": 0,
-    "timing_tolerance_reason": ""
+    "settle_ms": 10.0,
+    "sha256": "0669becd95d6a5f542900252f2765b12b97267fdce3534b4942eceea1d4f6a9d",
+    "timing_tolerance_cycles": 8000,
+    "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
   },
   "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-mode_9_random/stimulus.script",
+  "settled_hash": "c9f9354bc568b4627300dc9381d2e26fc7bbc3112e2a5fe5281e2c37db7a103e",
+  "settled_states": 30,
+  "settled_timing_hash": "0b7c1cf567b563afb2dcf9ab914817113c2eeaa3f1128a4abdc9763244f7c4b5",
   "status": "ok",
-  "timing_hash": "637202bad9adcca5ebbf7c2d69036fb0e604d13a1268eceaae50180a4ce1885f",
-  "total_cycles": 420800002,
-  "total_ns": 26300000125.0
+  "timing_hash": "a550f7540083bc2b71793455eec466ed5baad013b7fb1f5d901761c0972b128d",
+  "total_cycles": 420800001,
+  "total_ns": 26300000062.5
 }

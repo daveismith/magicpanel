@@ -11,6 +11,9 @@ authors' comments (`TraceRight` "left to right" starts at bit 7; `Quadrant` type
 lights `B11110000`). If the real panel is mirrored, every baseline is still internally
 consistent; only the human-readable filmstrip would be flipped.
 *2026-09-17: owner agrees this sounds right; provisional until checked on hardware.*
+*2026-09-19: **checked on hardware — rotated 180°.** v010.5's OneTest starts at the bottom left and
+TraceDown runs bottom to top, so register row 0 is the bottom row and bit 7 the rightmost column.
+The harness now renders that (harness 0.2.0); see D-24.*
 
 **A-2 — D13 reads HIGH when unjumpered.** See firmware-map R-7. Simulation default is HIGH.
 *2026-09-17: confirmed by owner — the Magic Panel PCB has no LED on D13.*
@@ -217,7 +220,7 @@ RELEASING.md).
   commit `0f62791` (tag `2.2.0+zensical-0.1.0`), per the repo's pin-by-SHA rule. It is described
   as transitional until Zensical has native versioning. Switch when that lands; the `gh-pages`
   layout (`versions.json`, one directory per version) is what the switcher reads either way.
-  Dry run: `mike deploy --update-aliases 0.11 latest`, `mike deploy dev` and
+  Dry run: `mike deploy --update-aliases 0.12 latest`, `mike deploy dev` and
   `mike set-default latest` produce the expected branch.
 - *Pins kept apart.* The docs dependencies are in `requirements-docs.txt` (`make docs-setup`), so
   the harness/CI regression venv (`requirements.txt`) stays minimal.
@@ -233,4 +236,25 @@ RELEASING.md).
   on any static host, including after a custom-domain move.
 - *No "unreleased" theme banner.* That needs a theme override, which Zensical does not take.
   `dev` builds carry a warning admonition from `gen_docs.py` instead.
+
+**D-24 — Orientation corrected, version 0.12 (2026-09-19, owner decisions).** The owner found
+that the real panel shows v010.5's patterns rotated 180° from what the harness rendered (A-1).
+Owner choices: fix it **in the firmware**, with a setting for panels mounted the other way, and
+release as **v012 / 0.12.0** because v011 is taken by another Magic Panel firmware.
+- *Harness.* `panel.c` now maps register row *r* to viewed row 7−*r* and reverses the bits;
+  device 0 drives the bottom half (GIF renderer and web player follow). Harness 0.2.0.
+- *Firmware.* `MapBoolGrid()` writes picture row *r* to register row 7−*r* with bits reversed, so
+  patterns appear as their names and the original comments describe. `CONFIG` bit 3
+  (`ORIENT_V010`) keeps v010.5's register layout; the factory default stays `0x07` (turned).
+- *Baselines.* Together the two changes leave every picture where the baselines had it, so the
+  baselines now mean "what the panel should show". But the rows reach the panel in a different
+  order within a ~7.5 ms `PrintGrid()`, so 40 baselines moved by up to one frame clock-out. They
+  were re-baselined only after `docs/rebaselines/2026-09-19-orientation/check.py` showed, for all
+  40, that sampled every 0.1 ms over the whole run the picture is identical to the old baseline
+  except while one of the two is clocking out a frame (`result.txt`). Each baseline directory has
+  its `rebaseline_diff.md`.
+- *Self-test.* The mutants were committed copies of the specimen; rendered correctly, the
+  specimen no longer matches the (turned) baselines. `tests/mutants/make_mutants.py` now builds
+  each mutant from the current dev sketch at test time, so they can't go stale; the specimen's
+  rebuild stays guarded by its flash-image test.
 

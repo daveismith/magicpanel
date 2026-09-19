@@ -9,29 +9,24 @@
     "elf": {
       "absolute_repo_path_in_elf": false,
       "deterministic": true,
-      "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
-      "flash_bytes": 13700,
-      "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
+      "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
+      "flash_bytes": 21202,
+      "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a",
+      "hex_sha256": "f1553b881d0a1fa9c4fa22623fe80f4e75bb8ae74431711d49ae47d97ad5e096",
       "path": "build/firmware.elf",
-      "reference": {
-        "elf_sha256": "36099b3475506f998d7c7374fa53c522d365db38452210c0f321c91da0414966",
-        "flash_matches": true,
-        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
-        "path": "/Users/davids/Documents/Source/git/magicpanel/MagicPanel_v010_5.ino.elf"
-      },
       "second_build": {
-        "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
-        "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a"
+        "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
+        "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a"
       }
     },
     "firmware_git": {
-      "dirty": false,
-      "sha": "8508e6277dd7546abf7d9ccd8ffe422367f4055b"
+      "dirty": true,
+      "sha": "e0f46c2ca08deb42ff1ac91e0eec827873a0ce16"
     },
     "sketch": {
-      "bytes": 57565,
-      "path": "MagicPanel_v010_5.ino",
-      "sha256": "f213fd7a68dd00307d1231cb648f2f7b223c4232dbc9780440ecc2253de6b638"
+      "bytes": 57684,
+      "path": "MagicPanel.ino",
+      "sha256": "8588c3784ef79875514a5e00f41172e94d2f8029e61bfecf9494fcc7459d2d42"
     },
     "toolchain": {
       "arduino_cli_commit": "01f3d4f2b",
@@ -58,7 +53,7 @@
       }
     }
   },
-  "canonical_hash": "c6c33e281af3c5a640c5dc1b8fd5cce0e52e723b44aa953a9073031693da4962",
+  "canonical_hash": "cbedc53ae0e701954c8b8959197ade13795f2cc61c68fc4debbc5de15f7186b3",
   "counts": {
     "display_changes": 167,
     "empty_latches": 1,
@@ -119,9 +114,9 @@
   },
   "firmware": {
     "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
-    "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb"
+    "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce"
   },
-  "harness_version": "0.1.0",
+  "harness_version": "0.2.0",
   "markers": [
     {
       "cycle": 1600001,
@@ -131,16 +126,21 @@
   ],
   "mcu": "atmega328p",
   "scenario": {
+    "compare_mode": "settled",
     "description": "I2C command 38: Quadrant(5,4) TL,BL,BR,TR",
     "name": "cmd_38_quadrant_type4",
     "run_ms": 5400,
-    "sha256": "99769bd194a8a744acf41d4aec2367ce6be9e55538ad32389362206b336c7a2f",
-    "timing_tolerance_cycles": 0,
-    "timing_tolerance_reason": ""
+    "settle_ms": 10.0,
+    "sha256": "c5440f474eda6ff0ea51ab27305c1cdfe2ed72be01ff3ef0628c607dc4a9283f",
+    "timing_tolerance_cycles": 8000,
+    "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
   },
   "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-cmd_38_quadrant_type4/stimulus.script",
+  "settled_hash": "01866caba9b57f62ec8e5c63745548d8ccdd1f72f63cbedb320dd1eda4707a0b",
+  "settled_states": 22,
+  "settled_timing_hash": "5d338860d2e43694c0473808ba3cee2aaf75a066375076c20c4e7795136c18d7",
   "status": "ok",
-  "timing_hash": "f96ed77ebb3ee1aed350e021e9d04932fa9c26e704168837b70fe8458d785b9b",
+  "timing_hash": "c936115ff567885e0f72a85bd7511535b1457186f3d4e8d359042fc53d1f900c",
   "total_cycles": 86400001,
   "total_ns": 5400000062.5
 }

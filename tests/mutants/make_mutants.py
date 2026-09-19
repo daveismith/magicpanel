@@ -1,48 +1,48 @@
 #!/usr/bin/env python3
-"""Create the mutant sketches used by the harness self-test (tests/test_mutants.py).
+"""Mutants for the harness self-test (tests/test_mutants.py).
 
-Each mutant is a full copy of MagicPanel_v010_5.ino with ONE deliberate, minimal change. The
-copies are committed so the test does not depend on this script, but regenerate them with
-`python3 tests/mutants/make_mutants.py` after the specimen changes. Each mutant directory also
-gets a MUTANT.json describing the change, the scenarios expected to fail, and a phrase the diff
-report must contain (so the test checks that the report names the right pattern).
+Each mutant is the CURRENT dev sketch (MagicPanel.ino) with ONE deliberate, minimal change,
+generated at test time so it can never go stale against the firmware under development
+(decision D-24; they used to be committed copies of the frozen specimen, which stopped
+matching the baselines once the panel orientation was corrected). Each entry names the
+scenarios the mutant must fail, phrases each failing diff report must contain (so the report
+names the right pattern), and scenarios that must still pass.
+
+  python3 tests/mutants/make_mutants.py OUTDIR     # write OUTDIR/<name>/<name>.ino for inspection
 """
 from __future__ import annotations
-import json, sys
+import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-SPECIMEN = REPO / "MagicPanel_v010_5.ino"
-OUT = Path(__file__).resolve().parent
+DEV_SKETCH = REPO / "MagicPanel.ino"
 
-# name -> description, edits [(old, new, expected_count)], scenarios that must FAIL, phrases each
-# scenario's diff report must contain (so the report names the right pattern), scenarios that must still PASS
+# name -> description, edits [(old, new, expected_count)], fails, report_contains, passes
 MUTANTS = {
     "cross_pixel": {
         "description": "One pixel changed in the Cross pattern: row 3 B00011000 -> B00111000",
-        "edits": [("  SetRow(3, B00011000);\n  SetRow(4, B00011000);\n  SetRow(5, B00100100);\n  SetRow(6, B01000010);\n  SetRow(7, B00000000);\n  MapBoolGrid();\n  PrintGrid();\n  delay(3000);",
-                   "  SetRow(3, B00111000);\n  SetRow(4, B00011000);\n  SetRow(5, B00100100);\n  SetRow(6, B01000010);\n  SetRow(7, B00000000);\n  MapBoolGrid();\n  PrintGrid();\n  delay(3000);", 1)],
+        "edits": [("  ShowRows(B00000000, B01000010, B00100100, B00011000, B00011000, B00100100, B01000010, B00000000);",
+                   "  ShowRows(B00000000, B01000010, B00100100, B00111000, B00011000, B00100100, B01000010, B00000000);", 1)],
         "fails": ["cmd_20_cross"], "report_contains": {"cmd_20_cross": ["cmd 20 Cross", "content differs"]},
         "passes": ["cmd_33_symbol"],
     },
     "toggle_faster": {
-        "description": "Toggle half-period 20 ms faster: delay(500) -> delay(480) (both halves)",
-        "edits": [("        MapBoolGrid();\n        PrintGrid();\n        delay(500);", "        MapBoolGrid();\n        PrintGrid();\n        delay(480);", 2)],
+        "description": "Toggle half-period 20 ms faster: PAT_DELAY(500) -> PAT_DELAY(480) (both halves)",
+        "edits": [("    PAT_DELAY(500);", "    PAT_DELAY(480);", 2)],
         "fails": ["cmd_05_toggle"], "report_contains": {"cmd_05_toggle": ["cmd 5 Toggle", "Timing: FAIL", "Display sequence: MATCH"]},
         "passes": ["cmd_20_cross"],
     },
     "intensity_14": {
-        "description": "Device 0 intensity one step lower at boot: lc.setIntensity(0,15) -> 14",
-        "edits": [("  lc.setIntensity(0,15);", "  lc.setIntensity(0,14);", 1)],
-        "fails": ["power_on_default", "cmd_20_cross"], "report_contains": {"power_on_default": ["intensity 14/", "before any stimulus"], "cmd_20_cross": ["intensity 14/"]},
+        "description": "Device 0 intensity one step lower at boot: lc.setIntensity(0,brightness) -> brightness - 1",
+        "edits": [("  lc.setIntensity(0,brightness);", "  lc.setIntensity(0,brightness - 1);", 1)],
+        "fails": ["power_on_default", "cmd_20_cross"],
+        "report_contains": {"power_on_default": ["intensity 14/", "before any stimulus"], "cmd_20_cross": ["intensity 14/"]},
         "passes": [],
     },
     "swap_symbol_cross": {
         "description": "Commands 20 and 33 swapped: cmd 20 now shows the AI Symbol and cmd 33 the Cross",
-        "edits": [("        case 20:              //  20 = Begins Cross Sequence: Panel is lit to display an X for 3s\n        {\n          allOFF();\n          Cross();",
-                   "        case 20:              //  20 = Begins Cross Sequence: Panel is lit to display an X for 3s\n        {\n          allOFF();\n          Symbol();", 1),
-                  ("        case 33:              //  33 = Begins AI Logo Sequence:  Displays the AI Aurebesh characters for 3s (...that we see all over our awesome packages from Rotopod and McWhlr) \n        {\n          allOFF();\n          Symbol();",
-                   "        case 33:              //  33 = Begins AI Logo Sequence:  Displays the AI Aurebesh characters for 3s (...that we see all over our awesome packages from Rotopod and McWhlr) \n        {\n          allOFF();\n          Cross();", 1)],
+        "edits": [("  { SQ_WRAP,          P_CROSS,       0,     0 },  // 20", "  { SQ_WRAP,          P_SYMBOL,      0,     0 },  // 20", 1),
+                  ("  { SQ_WRAP,          P_SYMBOL,      0,     0 },  // 33", "  { SQ_WRAP,          P_CROSS,       0,     0 },  // 33", 1)],
         "fails": ["cmd_20_cross", "cmd_33_symbol"],
         "report_contains": {"cmd_20_cross": ["cmd 20 Cross", "content differs"], "cmd_33_symbol": ["cmd 33 Symbol", "content differs"]},
         "passes": ["cmd_05_toggle"],
@@ -50,26 +50,31 @@ MUTANTS = {
 }
 
 
+def mutate(name: str, src: str | None = None) -> str:
+    """The dev sketch with mutant `name` applied; fails if an edit anchor is not found exactly."""
+    text = DEV_SKETCH.read_text() if src is None else src
+    for old, new, count in MUTANTS[name]["edits"]:
+        n = text.count(old)
+        if n != count:
+            raise ValueError(f"mutant {name}: expected {count} occurrence(s) of its edit anchor in "
+                             f"{DEV_SKETCH.name}, found {n}; update tests/mutants/make_mutants.py")
+        text = text.replace(old, new)
+    return text
+
+
+def write(name: str, out: Path) -> Path:
+    d = out / name
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f"{name}.ino"                         # arduino-cli needs <dir>/<dir>.ino
+    p.write_text(mutate(name))
+    return p
+
+
 def main() -> int:
-    src = SPECIMEN.read_text()
-    for name, m in MUTANTS.items():
-        text = src
-        for old, new, count in m["edits"]:
-            n = text.count(old)
-            if n != count:
-                print(f"{name}: expected {count} occurrence(s) of edit anchor, found {n}", file=sys.stderr); return 1
-            text = text.replace(old, new)
-        d = OUT / name; d.mkdir(exist_ok=True)
-        (d / f"{name}.ino").write_text(text)
-        (d / "MUTANT.json").write_text(json.dumps({"name": name, "description": m["description"], "fails": m["fails"],
-                                                    "report_contains": m["report_contains"], "passes": m["passes"]}, indent=2) + "\n")
-        changed = sum(1 for a, b in zip(src.splitlines(), text.splitlines()) if a != b)
-        print(f"{name}: {changed} line(s) changed")
-    (OUT / "README.md").write_text(
-        "# Mutant sketches (harness self-test)\n\nDeliberately broken copies of `MagicPanel_v010_5.ino`, one minimal change each, "
-        "used by `tests/test_mutants.py` to prove the comparator detects regressions and that `diff_report.md` names the affected "
-        "pattern. **They are never the firmware.** Regenerate with `python3 tests/mutants/make_mutants.py`.\n\n" +
-        "\n".join(f"- `{n}`: {m['description']} (expected to fail: {', '.join(m['fails'])})" for n, m in MUTANTS.items()) + "\n")
+    if len(sys.argv) != 2:
+        raise SystemExit(__doc__)
+    for name in MUTANTS:
+        print(write(name, Path(sys.argv[1])))
     return 0
 
 

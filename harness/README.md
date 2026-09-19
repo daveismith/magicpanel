@@ -211,7 +211,8 @@ What it does not model, and how the harness copes:
   modelled; intensity/scan-limit/shutdown/display-test are tracked as register state and
   applied to the rendered grid logically. Bits written to the nibble that has no LED wired are
   not rendered but are counted as `orphan_bits` so they still change the canonical sequence.
-- **Panel orientation** (which end is left) follows the source comments; see decision A-1.
+- **Panel orientation** was checked on hardware (A-1, D-24): register row 0 is the bottom row and
+  bit 7 the rightmost column; the rendered grid is what a viewer sees (row 0 top).
 - **Long delays**: `allONTimed(0)` blocks for 1000 s of simulated time; scenarios observe the
   ON state and stop rather than waiting it out.
 - **Speed**: ~130 M cycles/s on an M-series Mac; the full suite (443 s simulated) takes about a

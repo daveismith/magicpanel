@@ -33,6 +33,6 @@
 : Read the status block: `LAST_ERROR` (byte 14) and `ERROR_COUNT` (byte 15) say why
   ([error codes](reference/i2c-protocol.md#62-status-0x100x1f)).
 
-**Patterns look mirrored.**
-: Left and right have not been checked on hardware yet; please
-  [report it](https://github.com/daveismith/magicpanel/issues).
+**Patterns are upside down.**
+: Your panel is probably mounted the other way round. Set `CONFIG` bit 3 to rotate the picture
+  180° ([how](connect/wiring.md#orientation)).

@@ -100,14 +100,14 @@ def eeprom_image(path: Path, cfg: int, bright: int, checksum: int | None = None)
 # ---------------------------------------------------------------------------------- identity
 def test_identity(panel):
     assert panel.read(C["MP_WHO_AM_I"], 10) == [
-        C["MP_WHO_AM_I_0"], C["MP_WHO_AM_I_1"], C["MP_PROTO_MAJOR_VALUE"], C["MP_PROTO_MINOR_VALUE"], 0, 11, 0,
+        C["MP_WHO_AM_I_0"], C["MP_WHO_AM_I_1"], C["MP_PROTO_MAJOR_VALUE"], C["MP_PROTO_MINOR_VALUE"], 0, 12, 0,
         len(_spec_catalogue()), 0x1F, C["MP_I2C_ADDR"]]
 
 
 def test_pointer_persists_and_unmapped_reads_zero(panel):
     panel.cmd(f"i2c_write 0x14 {C['MP_REG_BIT'] | C['MP_FW_MINOR']}")
-    assert panel.cmd("i2c_read 0x14 2")["bytes"] == [11, 0]
-    assert panel.cmd("i2c_read 0x14 2")["bytes"] == [11, 0]      # no auto-advance between reads
+    assert panel.cmd("i2c_read 0x14 2")["bytes"] == [12, 0]
+    assert panel.cmd("i2c_read 0x14 2")["bytes"] == [12, 0]      # no auto-advance between reads
     assert panel.read(0x0A, 6) == [0] * 6
     assert panel.read(0x7E, 4) == [0] * 4                         # past 0x7F reads 0
 
@@ -284,6 +284,21 @@ def test_catalogue_index_out_of_range(panel):
     assert panel.reg(C["MP_INFO_INDEX"]) == 5
 
 
+# ---------------------------------------------------------------------------------- orientation
+@pytest.mark.parametrize("cfg,row,pixel", [
+    (C["MP_CONFIG_DEFAULT"], 0, "00000001"),                         # right way up: top right first
+    (C["MP_CONFIG_DEFAULT"] | C["MP_CFG_ORIENT_V010"], 7, "10000000"),  # v010.5: bottom left first
+])
+def test_orientation(panel, cfg, row, pixel):
+    """Test pixel (32) lights VMagicPanel[0][0] first: the top-right LED as seen on a normally
+    mounted panel (checked on hardware: v010.5 lit the bottom-left one)."""
+    panel.write(C["MP_REG_BIT"] | C["MP_CONFIG"], cfg)
+    panel.start(32)
+    grid = panel.display()["ascii"]
+    assert grid[row] == pixel.replace("1", "#").replace("0", ".")
+    assert sum(r.count("#") for r in grid) == 1
+
+
 # ---------------------------------------------------------------------------------- brightness
 def test_brightness(panel):
     assert panel.display()["intensity"] == [15, 15]
@@ -307,7 +322,7 @@ def test_brightness(panel):
     ([0x80 | 0x20, 20, 1, 2], "MP_ERR_BAD_VALUE"),
     ([0x80 | 0x21, 2], "MP_ERR_BAD_VALUE"),
     ([0x80 | 0x21, 0, 0], "MP_ERR_BAD_LENGTH"),
-    ([0x80 | 0x30, 0x08], "MP_ERR_BAD_VALUE"),
+    ([0x80 | 0x30, 0x10], "MP_ERR_BAD_VALUE"),
     ([0x80 | 0x3F, 0x00], "MP_ERR_BAD_MAGIC"),
     ([0x80 | 0x31] + [1] * 9, "MP_ERR_BAD_LENGTH"),
     ([20, 5], "MP_ERR_BAD_LENGTH"),

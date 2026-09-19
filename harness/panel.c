@@ -1,7 +1,14 @@
 #include "panel.h"
 #include <string.h>
 
+static uint8_t rev8(uint8_t v) {
+    v = (uint8_t)((v & 0xF0) >> 4 | (v & 0x0F) << 4);
+    v = (uint8_t)((v & 0xCC) >> 2 | (v & 0x33) << 2);
+    return (uint8_t)((v & 0xAA) >> 1 | (v & 0x55) << 1);
+}
+
 void panel_render(const max7221_chain_t *c, panel_state_t *out) {
+    uint8_t reg[PANEL_ROWS] = {0};
     memset(out, 0, sizeof *out);
     for (int d = 0; d < PANEL_DEVICES && d < c->n; d++) {
         const max7221_dev_t *dev = &c->dev[d];
@@ -12,16 +19,21 @@ void panel_render(const max7221_chain_t *c, panel_state_t *out) {
         out->decode[d] = dev->decode;
         for (int g = 0; g < 8; g++) {
             uint8_t v = max7221_visible_digit(dev, g);
-            int row = 4 * d + g / 2;
-            if ((g & 1) == 0) {               /* even digit: high nibble = columns 7..4 */
-                out->rows[row] |= v & 0xF0;
+            int row = 4 * d + g / 2;          /* register row, 0..7 */
+            if ((g & 1) == 0) {               /* even digit: high nibble */
+                reg[row] |= v & 0xF0;
                 out->orphan_bits += __builtin_popcount(v & 0x0F);
-            } else {                          /* odd digit: low nibble = columns 3..0 */
-                out->rows[row] |= v & 0x0F;
+            } else {                          /* odd digit: low nibble */
+                reg[row] |= v & 0x0F;
                 out->orphan_bits += __builtin_popcount(v & 0xF0);
             }
         }
     }
+    /* The panel is mounted so that register row 0 is the BOTTOM row and register bit 7 the
+     * RIGHTMOST column (A-1, confirmed on hardware 2026-09-19: v010.5's OneTest starts at the
+     * bottom left). The rendered grid is what a viewer sees: row 0 top, leftmost column first.
+     * Device 0 therefore drives the bottom four rows. */
+    for (int r = 0; r < PANEL_ROWS; r++) out->rows[PANEL_ROWS - 1 - r] = rev8(reg[r]);
 }
 
 int panel_state_equal(const panel_state_t *a, const panel_state_t *b) {

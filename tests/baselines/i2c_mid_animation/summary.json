@@ -9,23 +9,24 @@
     "elf": {
       "absolute_repo_path_in_elf": false,
       "deterministic": true,
-      "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c",
-      "flash_bytes": 18106,
-      "flash_sha256": "b1c590f3881bd7a42986efaa85009567aec39c0ecc7b4c11beaa25ac0660079f",
+      "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
+      "flash_bytes": 21202,
+      "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a",
+      "hex_sha256": "f1553b881d0a1fa9c4fa22623fe80f4e75bb8ae74431711d49ae47d97ad5e096",
       "path": "build/firmware.elf",
       "second_build": {
-        "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c",
-        "flash_sha256": "b1c590f3881bd7a42986efaa85009567aec39c0ecc7b4c11beaa25ac0660079f"
+        "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
+        "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a"
       }
     },
     "firmware_git": {
       "dirty": true,
-      "sha": "6bdaaf91c97fcc70b2cdffb3bab86f8b62e7a788"
+      "sha": "e0f46c2ca08deb42ff1ac91e0eec827873a0ce16"
     },
     "sketch": {
-      "bytes": 40755,
+      "bytes": 57684,
       "path": "MagicPanel.ino",
-      "sha256": "116180dfc81a0476ac98ebfd014ec33f0815fb5943b49fd17dcfe61f1704c058"
+      "sha256": "8588c3784ef79875514a5e00f41172e94d2f8029e61bfecf9494fcc7459d2d42"
     },
     "toolchain": {
       "arduino_cli_commit": "01f3d4f2b",
@@ -52,7 +53,7 @@
       }
     }
   },
-  "canonical_hash": "0204a7f003e8d55a2d0398411b1d6dedb291a12501bf5db6d7d833427ffaaa77",
+  "canonical_hash": "d482e40d0b5a2cb7e27f5e4e403fd91c81daaea66e3bd7085cbb6872752fccd8",
   "counts": {
     "display_changes": 95,
     "empty_latches": 1,
@@ -113,18 +114,18 @@
   },
   "firmware": {
     "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
-    "elf_sha256": "253446dba4e94112f552c446ed283af2f72a4189bccc9c37887b0c5fcc1b101c"
+    "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce"
   },
-  "harness_version": "0.1.0",
+  "harness_version": "0.2.0",
   "markers": [
     {
-      "cycle": 1600000,
-      "ns": 100000000.0,
+      "cycle": 1600001,
+      "ns": 100000062.5,
       "text": "cmd 5 Toggle(10)"
     },
     {
-      "cycle": 33600003,
-      "ns": 2100000187.5,
+      "cycle": 33600000,
+      "ns": 2100000000.0,
       "text": "cmd 20 Cross"
     }
   ],
@@ -142,9 +143,9 @@
   "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-i2c_mid_animation/stimulus.script",
   "settled_hash": "15a16e90ae896f5fcd9ca6ae525ca753eb1c9af02e525834bbadba060ca01f7f",
   "settled_states": 7,
-  "settled_timing_hash": "d4d6420df925db6135b46864863ee89c90dc4e2eab7c4c57ac8655a7dfacf7d7",
+  "settled_timing_hash": "84ee716c18a8d78f1f4757769fe6a9e9df6b345c2a0215fc52f63bb781aff511",
   "status": "ok",
-  "timing_hash": "eb3896d95d862fe6989750020c0a21738424ad391f1f655c2725e532daeacf68",
-  "total_cycles": 240000000,
-  "total_ns": 15000000000.0
+  "timing_hash": "92e63bacda57d4f82cfc80d41e55ac86f43f7a46b2a950e8a8fec8b7dab7ce8e",
+  "total_cycles": 240000002,
+  "total_ns": 15000000125.0
 }

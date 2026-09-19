@@ -50,7 +50,7 @@ def frame_image(rec: dict, idx: int, total: int, t_ms: float, end_ms: float, tit
             d.text((pad, 38), marker[:48], fill=MARK, font=font)
     d.rectangle([pad - 4, header_h - 4, pad + grid_px + 3, header_h + grid_px + 3], fill=PANEL_BG)
     for r, row in enumerate(rec["grid"]):
-        dev = r // 4
+        dev = 1 - r // 4                           # device 0 drives the bottom half (A-1)
         inten = rec["intensity"][dev] / 15.0
         shut = rec["shutdown"][dev]
         for c, bit in enumerate(row):

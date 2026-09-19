@@ -11,7 +11,7 @@
 #define PANEL_ROWS 8
 
 typedef struct panel_state {
-    uint8_t rows[PANEL_ROWS];          /* bit k = sketch column k; bit 7 = physical LEFT column */
+    uint8_t rows[PANEL_ROWS];          /* as a viewer sees it: rows[0] = top row, bit 7 = LEFT column (A-1) */
     uint8_t intensity[PANEL_DEVICES];
     uint8_t shutdown[PANEL_DEVICES];   /* 1 = device IS shut down (register value 0) */
     uint8_t scan_limit[PANEL_DEVICES];

@@ -1,7 +1,7 @@
 /*
  * magicpanel_i2c.h - Magic Panel I2C register interface, protocol v1.0
  *
- * Controller-side constants for talking to a Magic Panel running firmware v011.0 or later.
+ * Controller-side constants for talking to a Magic Panel running firmware v012.0 or later.
  * The protocol is described in docs/i2c-protocol.md; this header is its machine-readable part
  * and is also what the firmware test-suite reads, so the two cannot drift apart.
  *
@@ -102,6 +102,7 @@
 #define MP_CFG_LEGACY          0x01
 #define MP_CFG_GPIO_ENABLE     0x02
 #define MP_CFG_GPIO_RESUME     0x04
+#define MP_CFG_ORIENT_V010     0x08    /* draw as v010.5: rotated 180 degrees on a normally mounted panel */
 #define MP_CONFIG_DEFAULT      0x07
 #define MP_DEFAULT_BRIGHTNESS_DEFAULT 15
 #define MP_SAVE_MAGIC          0xA5

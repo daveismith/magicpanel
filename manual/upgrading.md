@@ -4,7 +4,8 @@ This firmware replaces IA-PARTS Magic Panel FX v010.5 and is built to be a drop-
 
 ## What stays the same
 
-- The I2C address `0x14` and the one-byte commands `0`–`39`, with the same patterns and timing.
+- The I2C address `0x14` and the one-byte commands `0`–`39`, with the same patterns and timing
+  (but see the orientation change below).
   That includes the quirks: commands 1–4 leave the panel lit, and command 2 runs for 2 s + 5 s.
 - The rotary switch and jumper positions and the shows they run.
 
@@ -12,6 +13,7 @@ This firmware replaces IA-PARTS Magic Panel FX v010.5 and is built to be a drop-
 
 | v010.5 | This firmware |
 |---|---|
+| Every pattern appeared rotated 180° (*Trace down* ran bottom to top) | Patterns appear the right way up; `CONFIG` bit 3 restores the old orientation for panels mounted the other way ([orientation](connect/wiring.md#orientation)) |
 | A command sent during a sequence ran *inside* it; the first sequence resumed afterwards | The new command replaces the running sequence at once |
 | A multi-byte write made the panel ignore every later command until reset | It is rejected and the panel stays responsive |
 | The rotary switch was read between sequences only | A new position (steady for 20 ms) takes effect at once |

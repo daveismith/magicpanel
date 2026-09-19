@@ -46,5 +46,6 @@ rotary switch or a jumper) or on command from a droid controller over I2C.
 
 </div>
 
-This firmware is a compatible successor to IA-PARTS Magic Panel FX v010.5: existing controllers
-that send one command byte keep working. See [Upgrading from v010.5](upgrading.md).
+This firmware (v012; v011 is used by another Magic Panel firmware) is a compatible successor to
+IA-PARTS Magic Panel FX v010.5: existing controllers that send one command byte keep working, and
+patterns now appear the right way up. See [Upgrading from v010.5](upgrading.md).

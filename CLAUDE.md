@@ -94,7 +94,12 @@ sensitive to the *order* of `random()` calls; see `docs/decisions.md` D-1/D-16.
   in the specimen (contained by a spill area in the dev sketch, D-21). These are baselined as-is;
   fixing them is a behaviour change that requires a deliberate re-baseline.
 - Command 1 / jumper mode 8 block for 1000 s; their scenarios only observe the ON state.
-- Row 0 is the top; `SetRow` bit 7 is the leftmost column (assumption A-1, provisional).
+- **Orientation (A-1, D-24, checked on hardware):** the rendered grid is what a viewer sees, row 0
+  at the top. The panel is mounted with register row 0 at the bottom and bit 7 at the right, so the
+  dev sketch turns the picture 180° in `MapBoolGrid()` (v010.5 did not: its patterns appear upside
+  down); `CONFIG` bit 3 restores v010.5's orientation. `VMagicPanel[row][7]` is the leftmost pixel.
+- **Version:** the dev sketch is v012 (firmware 0.12.0); v011 is skipped because another Magic
+  Panel firmware uses it.
 
 ## Using the MCP server from Claude Code
 

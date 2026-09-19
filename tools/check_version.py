@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Check a release tag against the firmware version and derive the docs version (RELEASING.md).
 
-  tools/check_version.py v0.11.0        ->  docs_version=0.11  prerelease=false
+  tools/check_version.py v0.12.0        ->  docs_version=0.12  prerelease=false
   tools/check_version.py v0.12.0-rc1    ->  docs_version=0.12-rc  prerelease=true
-  tools/check_version.py --notes v0.11.0   the CHANGELOG.md section for 0.11.0 (release notes)
+  tools/check_version.py --notes v0.12.0   the CHANGELOG.md section for 0.12.0 (release notes)
 
 Fails unless the tag is vMAJOR.MINOR.PATCH[-PRERELEASE] and MAJOR.MINOR.PATCH equals FW_MAJOR,
 FW_MINOR and FW_PATCH in MagicPanel.ino. Prints key=value lines, and appends them to
