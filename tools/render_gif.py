@@ -74,12 +74,20 @@ def frame_image(rec: dict, idx: int, total: int, t_ms: float, end_ms: float, tit
 
 def render(src_dir: Path, out: Path, title: str, speed: float = 1.0, min_frame_ms: float = 20.0,
            all_states: bool = False, hold_ms: float = 1000.0, scale: int = 28, tail_ms: float | None = None) -> dict:
+    """Render the run or baseline directory src_dir (display.jsonl + summary.json) to out."""
     recs = mplib.read_jsonl(src_dir / "display.jsonl")
     if not recs:
         raise SystemExit(f"no display records in {src_dir}")
     summary = json.loads((src_dir / "summary.json").read_text()) if (src_dir / "summary.json").exists() else {}
-    markers = summary.get("markers", [])
-    total_cycles = summary.get("total_cycles") or recs[-1]["cycle"]
+    return render_records(recs, out, title, summary.get("markers", []), summary.get("total_cycles") or recs[-1]["cycle"],
+                          speed, min_frame_ms, all_states, hold_ms, scale, tail_ms)
+
+
+def render_records(recs: list[dict], out: Path, title: str, markers: list[dict], total_cycles: int,
+                   speed: float = 1.0, min_frame_ms: float = 20.0, all_states: bool = False, hold_ms: float = 1000.0,
+                   scale: int = 28, tail_ms: float | None = None) -> dict:
+    """Render display records to an animated GIF; markers are {cycle, text} captions; the timeline
+    ends at total_cycles."""
     end_ms = total_cycles / mplib.CYCLES_PER_MS
     font = _font()
 
