@@ -42,6 +42,7 @@
 #define MP_CAP_BRIGHTNESS      0x04
 #define MP_CAP_NAMES           0x08
 #define MP_CAP_EEPROM_CONFIG   0x10
+#define MP_CAP_ORIENTATION     0x20
 
 /* ---- Status (read-only; 16 bytes, one read) ---------------------------------------------- */
 #define MP_STATUS              0x10    /* start of the status block */
@@ -94,17 +95,19 @@
 #define MP_STOP_FREEZE         1
 #define MP_BRIGHTNESS_MAX      15
 
-/* ---- Configuration (RW; persisted by MP_SAVE) -------------------------------------------- */
+/* ---- Configuration (RW; CONFIG, DEFAULT_BRIGHTNESS, ORIENTATION persisted by MP_SAVE) ----- */
 #define MP_CONFIG              0x30
 #define MP_DEFAULT_BRIGHTNESS  0x31
+#define MP_ORIENTATION         0x32    /* RW: MP_ORIENT_NORMAL or MP_ORIENT_ROTATE_180 */
 #define MP_SAVE                0x3F    /* W: MP_SAVE_MAGIC or MP_FACTORY_MAGIC */
 
 #define MP_CFG_LEGACY          0x01
 #define MP_CFG_GPIO_ENABLE     0x02
 #define MP_CFG_GPIO_RESUME     0x04
-#define MP_CFG_ORIENT_V010     0x08    /* draw as v010.5: rotated 180 degrees on a normally mounted panel */
 #define MP_CONFIG_DEFAULT      0x07
 #define MP_DEFAULT_BRIGHTNESS_DEFAULT 15
+#define MP_ORIENT_NORMAL       0       /* as firmware v010.5 */
+#define MP_ORIENT_ROTATE_180   1       /* turned 180 degrees, for panels installed the other way up */
 #define MP_SAVE_MAGIC          0xA5
 #define MP_FACTORY_MAGIC       0x5A
 

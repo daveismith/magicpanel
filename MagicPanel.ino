@@ -2,8 +2,8 @@
 //
 //// Release History
 // v012.0 - I2C register interface (docs/i2c-protocol.md): start/stop/status/catalogue/brightness,
-//          legacy one-byte commands kept; every animation runs from loop(); the picture is turned
-//          180 degrees so patterns appear the right way up (CONFIG bit 3 restores v010.5's).
+//          legacy one-byte commands kept; every animation runs from loop(); ORIENTATION setting
+//          turns the picture 180 degrees for panels installed the other way up.
 //          (v011 is skipped: that number is used by another Magic Panel firmware.)
 // v010.5 - Re-added Working I2C and additional display sequences  (FlthyMcNsty 05-21-2014)
 // v010 - Remove I2C code and clean up
@@ -90,7 +90,7 @@ int NumLoops=2;
 #define FW_MAJOR    0
 #define FW_MINOR    12
 #define FW_PATCH    0
-#define CAPS        0x1F          // legacy, repeat, brightness, names, EEPROM config
+#define CAPS        0x3F          // legacy, repeat, brightness, names, EEPROM config, orientation
 #define REG_BIT     0x80
 #define MAX_WRITE_DATA 8
 #define REG_STATUS             0x10
@@ -99,18 +99,20 @@ int NumLoops=2;
 #define REG_BRIGHTNESS         0x22
 #define REG_CONFIG             0x30
 #define REG_DEFAULT_BRIGHTNESS 0x31
+#define REG_ORIENTATION        0x32
 #define REG_SAVE               0x3F
 #define REG_INFO_INDEX         0x40
 #define CFG_LEGACY       0x01
 #define CFG_GPIO_ENABLE  0x02
 #define CFG_GPIO_RESUME  0x04
-#define CFG_ORIENT_V010  0x08     // draw as v010.5 did (rotated 180 degrees on a normally mounted panel)
-#define CFG_VALID        0x0F
+#define CFG_VALID        0x07
 #define CFG_DEFAULT      0x07
 #define SAVE_MAGIC       0xA5
 #define FACTORY_MAGIC    0x5A
 #define EE_MAGIC         'M'
-#define EE_LAYOUT        1
+#define EE_LAYOUT        2        // 1 (unreleased dev builds) had no ORIENTATION byte: loads factory values
+#define ORIENT_NORMAL    0        // as v010.5
+#define ORIENT_ROT180    1        // turned 180 degrees
 enum { ERR_NONE, ERR_UNKNOWN_REG, ERR_READ_ONLY, ERR_BAD_LENGTH, ERR_BAD_VALUE, ERR_LEGACY_OFF, ERR_BAD_MAGIC };
 enum { ACT_NONE, ACT_START, ACT_STOP_BLANK, ACT_STOP_FREEZE };
 
@@ -120,6 +122,7 @@ volatile byte lastError = ERR_NONE;
 volatile byte errorCount = 0;
 volatile byte cfgConfig = CFG_DEFAULT;
 volatile byte cfgDefaultBrightness = 15;
+volatile byte orientation = ORIENT_NORMAL;
 byte cfgApplied = CFG_DEFAULT;    // CONFIG as consumeI2C last saw it
 volatile byte brightness = 15;
 // Actions posted by receiveEvent(); a later start/stop replaces an earlier one not yet carried out.
@@ -352,20 +355,20 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { INFO_ENDS_LIT | INFO_HOLD,  5015,    "On 5s" },
   { INFO_ENDS_LIT | INFO_HOLD,  10016,   "On 10s" },
   { 0,                          10172,   "Toggle" },
-  { 0,                          4570,    "Alert" },
-  { 0,                          11400,   "Alert long" },
-  { 0,                          8360,    "Trace up" },
-  { 0,                          8669,    "Trace up line" },
-  { 0,                          8360,    "Trace down" },
-  { 0,                          8669,    "Trace down line" },
+  { 0,                          4569,    "Alert" },
+  { 0,                          11398,   "Alert long" },
+  { 0,                          8359,    "Trace up" },
+  { 0,                          8668,    "Trace up line" },
+  { 0,                          8359,    "Trace down" },
+  { 0,                          8668,    "Trace down line" },
   { 0,                          8365,    "Trace right" },
   { 0,                          8365,    "Trace right line" },
   { 0,                          8365,    "Trace left" },
   { 0,                          8365,    "Trace left line" },
   { 0,                          5213,    "Expand" },
-  { 0,                          5214,    "Expand ring" },
+  { 0,                          5213,    "Expand ring" },
   { 0,                          5213,    "Compress" },
-  { 0,                          5214,    "Compress ring" },
+  { 0,                          5213,    "Compress ring" },
   { INFO_HOLD,                  3024,    "Cross" },
   { 0,                          4150,    "Cylon column" },
   { 0,                          4150,    "Cylon row" },
@@ -377,7 +380,7 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { 0,                          3337,    "Flash quadrants" },
   { 0,                          5122,    "Two loop" },
   { 0,                          5122,    "One loop" },
-  { 0,                          4838,    "Test fill" },
+  { 0,                          4837,    "Test fill" },
   { 0,                          2427,    "Test pixel" },
   { INFO_HOLD,                  3024,    "Symbol AI" },
   { INFO_HOLD,                  4047,    "Symbol 2GWD" },
@@ -385,7 +388,7 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { 0,                          4247,    "Quadrant 2" },
   { 0,                          4323,    "Quadrant 3" },
   { 0,                          4323,    "Quadrant 4" },
-  { INFO_RANDOM,                6638,    "Random pixel" },
+  { INFO_RANDOM,                6636,    "Random pixel" },
   { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show" },
   { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show long" },
 };
@@ -1050,22 +1053,21 @@ bool Cross() {
   CO_END(patPC);
 }
 
-// VMagicPanel[row][col] is the picture as seen: row 0 at the top, col 7 at the left. The panel is
-// mounted with register row 0 at the BOTTOM and register bit 7 at the RIGHT (A-1, checked on
-// hardware), so each row goes to register row 7-row with its bits reversed. v010.5 wrote rows
-// unturned, which shows every pattern rotated 180 degrees; CONFIG bit 3 (CFG_ORIENT_V010) keeps that.
+// VMagicPanel[row][col] is the picture as installed: row 0 at the top, col 7 at the left, written
+// to register row `row` exactly as v010.5 did (A-1). ORIENTATION = ORIENT_ROT180 turns it 180
+// degrees (register row 7-row, bits reversed) for panels installed the other way up.
 void MapBoolGrid(){
-  bool v010 = cfgConfig & CFG_ORIENT_V010;
-  for(int Row=0; Row<8; Row++){
-    const boolean* v = VMagicPanel[Row];
-    if (v010) {
-      MagicPanel[2*Row]=128*v[7]+64*v[6]+32*v[5]+16*v[4];       // 0, 2, 4, 6, 8, 10, 12, 14
-      MagicPanel[2*Row+1]=8*v[3]+4*v[2]+2*v[1]+v[0];            // 1, 3, 5, 7, 9, 11, 13, 15
-    } else {
+  if (orientation == ORIENT_ROT180) {       // one check per frame; the default loop is v010.5's
+    for(int Row=0; Row<8; Row++){
       byte r = 7 - Row;
-      MagicPanel[2*r]=128*v[0]+64*v[1]+32*v[2]+16*v[3];
-      MagicPanel[2*r+1]=8*v[4]+4*v[5]+2*v[6]+v[7];
+      MagicPanel[2*r]=128*VMagicPanel[Row][0]+64*VMagicPanel[Row][1]+32*VMagicPanel[Row][2]+16*VMagicPanel[Row][3];
+      MagicPanel[2*r+1]=8*VMagicPanel[Row][4]+4*VMagicPanel[Row][5]+2*VMagicPanel[Row][6]+VMagicPanel[Row][7];
     }
+    return;
+  }
+  for(int Row=0; Row<8; Row++){
+    MagicPanel[2*Row]=128*VMagicPanel[Row][7]+64*VMagicPanel[Row][6]+32*VMagicPanel[Row][5]+16*VMagicPanel[Row][4];       // 0, 2, 4, 6, 8, 10, 12, 14
+    MagicPanel[2*Row+1]=8*VMagicPanel[Row][3]+4*VMagicPanel[Row][2]+2*VMagicPanel[Row][1]+VMagicPanel[Row][0];            // 1, 3, 5, 7, 9, 11, 13, 15
   }
 }
 
@@ -1440,18 +1442,20 @@ void applyConfig() {
   }
 }
 
-byte eeChecksum(byte cfg, byte bright) { return EE_MAGIC ^ EE_LAYOUT ^ cfg ^ bright ^ 0xA5; }
+byte eeChecksum(byte cfg, byte bright, byte orient) { return EE_MAGIC ^ EE_LAYOUT ^ cfg ^ bright ^ orient ^ 0xA5; }
 
 void loadConfig() {
   byte magic = eeprom_read_byte((const uint8_t*)0);
   byte layout = eeprom_read_byte((const uint8_t*)1);
   byte cfg = eeprom_read_byte((const uint8_t*)2);
   byte bright = eeprom_read_byte((const uint8_t*)3);
-  byte sum = eeprom_read_byte((const uint8_t*)4);
+  byte orient = eeprom_read_byte((const uint8_t*)4);
+  byte sum = eeprom_read_byte((const uint8_t*)5);
   if (magic == EE_MAGIC && layout == EE_LAYOUT && (cfg & ~CFG_VALID) == 0 && bright <= 15 &&
-      sum == eeChecksum(cfg, bright)) {
+      orient <= ORIENT_ROT180 && sum == eeChecksum(cfg, bright, orient)) {
     cfgConfig = cfg;
     cfgDefaultBrightness = bright;
+    orientation = orient;
   }
   cfgApplied = cfgConfig;
 }
@@ -1461,15 +1465,17 @@ void saveConfig(byte magic) {
     noInterrupts();
     cfgConfig = CFG_DEFAULT;
     cfgDefaultBrightness = 15;
+    orientation = ORIENT_NORMAL;
     interrupts();
     applyConfig();
   }
-  byte cfg = cfgConfig, bright = cfgDefaultBrightness;
+  byte cfg = cfgConfig, bright = cfgDefaultBrightness, orient = orientation;
   eeprom_update_byte((uint8_t*)0, EE_MAGIC);
   eeprom_update_byte((uint8_t*)1, EE_LAYOUT);
   eeprom_update_byte((uint8_t*)2, cfg);
   eeprom_update_byte((uint8_t*)3, bright);
-  eeprom_update_byte((uint8_t*)4, eeChecksum(cfg, bright));
+  eeprom_update_byte((uint8_t*)4, orient);
+  eeprom_update_byte((uint8_t*)5, eeChecksum(cfg, bright, orient));
 }
 
 void i2cError(byte code) {
@@ -1486,6 +1492,7 @@ byte checkPlain(byte reg, const byte* d, byte n) {
       case REG_DEFAULT_BRIGHTNESS: if (v > 15) return ERR_BAD_VALUE; break;
       case REG_CONFIG:             if (v & ~CFG_VALID) return ERR_BAD_VALUE; break;
       case REG_INFO_INDEX:         if (v >= SEQ_COUNT) return ERR_BAD_VALUE; break;
+      case REG_ORIENTATION:        if (v > ORIENT_ROT180) return ERR_BAD_VALUE; break;
       default:
         if (r < 0x0A || (r >= REG_STATUS && r < REG_STATUS + 16) || (r > REG_INFO_INDEX && r < 0x56))
           return ERR_READ_ONLY;
@@ -1526,6 +1533,7 @@ void writeRegisters(byte reg, const byte* d, byte n) {
           case REG_DEFAULT_BRIGHTNESS: cfgDefaultBrightness = d[i]; break;
           case REG_CONFIG:             cfgConfig = d[i]; break;
           case REG_INFO_INDEX:         infoIndex = d[i]; break;
+          case REG_ORIENTATION:        orientation = d[i]; break;
         }
       }
   }
@@ -1603,6 +1611,7 @@ byte registerByte(byte r, const byte* st) {
     case REG_BRIGHTNESS:         return brightness;
     case REG_CONFIG:             return cfgConfig;
     case REG_DEFAULT_BRIGHTNESS: return cfgDefaultBrightness;
+    case REG_ORIENTATION:        return orientation;
     case REG_INFO_INDEX:         return infoIndex;
     default:                     return 0;
   }

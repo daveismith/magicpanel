@@ -1,6 +1,6 @@
 {
-  "canonical_hash": "e52286b4682475a48f6bee7aeb29dbce5654f0be9bd49b322de7a2ad47856d90",
-  "captured_at": "2026-09-19T20:43:50+00:00",
+  "canonical_hash": "4a2cfa9d17c087659e02dcf89abfb393fbad92b5cb1c85c76e8c3cb5fe42316e",
+  "captured_at": "2026-09-18T02:36:05+00:00",
   "counts": {
     "display_changes": 167,
     "empty_latches": 1,
@@ -13,23 +13,23 @@
     "script_steps": 2
   },
   "firmware": {
-    "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
-    "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a",
+    "elf_sha256": "4ed338602dde20d177d23f4d403eee07f5f137bb6029600d2cfec52055701fcb",
+    "flash_sha256": "3b394ae67bc0f02379d14f4077903b8d3711b4b8ee6288b9d85c411cb081054a",
     "git": {
-      "dirty": true,
-      "sha": "e0f46c2ca08deb42ff1ac91e0eec827873a0ce16"
+      "dirty": false,
+      "sha": "8508e6277dd7546abf7d9ccd8ffe422367f4055b"
     },
-    "sketch_sha256": "8588c3784ef79875514a5e00f41172e94d2f8029e61bfecf9494fcc7459d2d42"
+    "sketch_sha256": "f213fd7a68dd00307d1231cb648f2f7b223c4232dbc9780440ecc2253de6b638"
   },
   "harness": {
-    "repo_sha": "e0f46c2ca08deb42ff1ac91e0eec827873a0ce16",
+    "repo_sha": "1a9cb5e3e5e498ed18c40005a862e0c7a4d273cc",
     "simavr_sha": "fe665cef7d309e95bafe7339cdf11fe73d9218b3",
-    "version": "0.2.0"
+    "version": "0.1.0"
   },
   "random_seed_note": "ADC3 undriven -> randomSeed(0) ignored -> avr-libc default seed (decision D-1)",
   "scenario": "cmd_11_tracedown_type2",
-  "scenario_sha256": "0ec9c677381ddac3e94af60e1748ff44fc974491b0ed5d56886c092a2d86d625",
-  "timing_hash": "8e2f51c743b4fd5196267e87892ff908d06c35c2280a8ef428703dffc2ba810d",
+  "scenario_sha256": "dc9eeec2c61fd3893b7e6c6c607764192ee03b746b78b1ab9216c39137131cd4",
+  "timing_hash": "29e13678207cdcf5fd4902d959c1af9d345b1b3727baf6f4354124c5315d5618",
   "toolchain": {
     "arduino_cli_commit": "01f3d4f2b",
     "arduino_cli_version": "1.5.1",

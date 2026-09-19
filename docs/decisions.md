@@ -11,9 +11,9 @@ authors' comments (`TraceRight` "left to right" starts at bit 7; `Quadrant` type
 lights `B11110000`). If the real panel is mirrored, every baseline is still internally
 consistent; only the human-readable filmstrip would be flipped.
 *2026-09-17: owner agrees this sounds right; provisional until checked on hardware.*
-*2026-09-19: **checked on hardware — rotated 180°.** v010.5's OneTest starts at the bottom left and
-TraceDown runs bottom to top, so register row 0 is the bottom row and bit 7 the rightmost column.
-The harness now renders that (harness 0.2.0); see D-24.*
+*2026-09-19: checked on hardware. On the bench the panel shows this rendering rotated 180°; as
+installed in the owner's dome (the other way up) it shows it exactly. The rendering is defined
+as the installed view, where v010.5's patterns look as named; see D-24 and D-25.*
 
 **A-2 — D13 reads HIGH when unjumpered.** See firmware-map R-7. Simulation default is HIGH.
 *2026-09-17: confirmed by owner — the Magic Panel PCB has no LED on D13.*
@@ -237,7 +237,7 @@ RELEASING.md).
 - *No "unreleased" theme banner.* That needs a theme override, which Zensical does not take.
   `dev` builds carry a warning admonition from `gen_docs.py` instead.
 
-**D-24 — Orientation corrected, version 0.12 (2026-09-19, owner decisions).** The owner found
+**D-24 — Orientation corrected, version 0.12 (2026-09-19, owner decisions). *Orientation part superseded by D-25 the same day; the version (0.12.0, v011 skipped) and the dev-sketch mutants stand.*** The owner found
 that the real panel shows v010.5's patterns rotated 180° from what the harness rendered (A-1).
 Owner choices: fix it **in the firmware**, with a setting for panels mounted the other way, and
 release as **v012 / 0.12.0** because v011 is taken by another Magic Panel firmware.
@@ -257,4 +257,21 @@ release as **v012 / 0.12.0** because v011 is taken by another Magic Panel firmwa
   specimen no longer matches the (turned) baselines. `tests/mutants/make_mutants.py` now builds
   each mutant from the current dev sketch at test time, so they can't go stale; the specimen's
   rebuild stays guarded by its flash-image test.
+
+**D-25 — Orientation as installed; ORIENTATION register (2026-09-19, owner decision).** The owner's
+panel is installed upside down relative to how it was held on the bench, and in the dome
+v010.5's layout is the right way up. D-24's firmware turn is therefore reverted, and turning
+becomes an option:
+- *Rendering.* The harness again renders the panel as installed (the original A-1 picture;
+  harness 0.3.0 renders exactly what 0.1.0 did). The GIF renderer and player follow (device 0 =
+  top half).
+- *Firmware.* `MapBoolGrid()` writes rows exactly as v010.5 by default. A separate plain register
+  `ORIENTATION` (0x32: 0 normal, 1 turned 180°) selects the turned layout; it is a register rather
+  than a `CONFIG` bit so a controller can set it without read-modify-write, and it leaves room
+  for more values (e.g. mirroring). `SAVE` stores it; the EEPROM layout goes to version 2 (magic,
+  2, CONFIG, DEFAULT_BRIGHTNESS, ORIENTATION, checksum). Layout 1 only existed in unreleased dev
+  builds and now loads factory values. A change shows from the next frame drawn.
+- *Baselines.* The 40 baselines D-24 re-baselined are restored byte for byte from before it, and
+  its rebaseline evidence is removed with them (it is in git history, commit b3daf72). The
+  default path clocks the MAX7221s exactly as before, so they pass within D-20's tolerance.
 

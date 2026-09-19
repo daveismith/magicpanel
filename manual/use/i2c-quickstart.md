@@ -16,7 +16,7 @@ and C++ are in [`magicpanel_i2c.h`](../reference/magicpanel_i2c.h).
 Write the register pointer `0x80` (identity), then read 10 bytes:
 
 ```
-write [0x80]   read 10  ->  4D 50 01 00 00 0C 00 2A 1F 14
+write [0x80]   read 10  ->  4D 50 01 00 00 0C 00 2A 3F 14
                             "MP" protocol 1.0, firmware 0.12.0, 42 sequences
 ```
 
@@ -103,6 +103,7 @@ with SMBus(1) as bus:
 | Read status | write `[0x90]`, read 16 |
 | Name, length and flags of sequence *n* | write `[0xC0, n]`, read 22 |
 | Ignore one-byte commands from now on | `[0xB0, 0x06]`, then `[0xBF, 0xA5]` to keep it after power-off |
+| Turn the picture 180° (panel installed the other way up) | `[0xB2, 1]`, then `[0xBF, 0xA5]` to keep it |
 
 !!! warning "Polling a random show"
     Every write to the panel, including the pointer write before a status read, restarts the

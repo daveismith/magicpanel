@@ -25,9 +25,9 @@
     ctx.clearRect(0, 0, size, size);
     for (let row = 0; row < 8; row++) {
       const bits = parseInt(frame[1].substr(row * 2, 2), 16);
-      const level = (row < 4 ? frame[3] : frame[2]) / 15;   // device 0 drives the bottom half
+      const level = (row < 4 ? frame[2] : frame[3]) / 15;   // device 0 drives the top half
       for (let col = 0; col < 8; col++) {
-        const lit = (bits >> (7 - col)) & 1;   // rows as seen: row 0 top, bit 7 = leftmost
+        const lit = (bits >> (7 - col)) & 1;   // as installed: row 0 top, bit 7 = leftmost
         ctx.globalAlpha = lit ? 0.45 + 0.55 * level : 1;
         ctx.fillStyle = lit ? on : off;
         ctx.beginPath();

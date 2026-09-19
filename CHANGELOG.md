@@ -18,14 +18,13 @@ version number 0.11 (v011) is skipped: it is used by another Magic Panel firmwar
   time, start counter, errors); identity and version; the sequence catalogue with names,
   flags and measured lengths; brightness.
 - Settings kept in EEPROM: legacy one-byte commands on/off, rotary/jumper inputs on/off, resume
-  of the rotary/jumper show after an I2C sequence, and a default brightness.
+  of the rotary/jumper show after an I2C sequence, a default brightness and the orientation.
 - The random shows can be started over I2C (sequences 40 and 41).
-- `CONFIG` bit 3 draws the picture as v010.5 did, for panels mounted the other way round.
+- `ORIENTATION` setting (register 0x32, saved in EEPROM) turns the picture 180° for panels
+  installed the other way up. By default patterns are drawn exactly as in v010.5.
 
 ### Changed
 
-- Patterns appear the right way up: v010.5 drew every pattern rotated 180° (for example,
-  *Trace down* ran bottom to top and *Test pixel* started at the bottom left).
 - Every animation runs from the main loop. An I2C command replaces the running sequence instead
   of running inside it.
 - A multi-byte I2C write is rejected instead of making the panel ignore all later commands.

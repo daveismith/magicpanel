@@ -164,12 +164,11 @@ authors' comments:
   rows 0-3 are the **top** half (device 0, "Top 7221 = 0" L78) and Cols 7-4 are the left half.
 - `TraceDown` "top to bottom" starts at row 0 (L1068 ff.).
 
-Canonical render used by the harness (**A-1 in `decisions.md`, confirmed on hardware
-2026-09-19**): the grid is what a viewer sees on a normally mounted panel. Register row 0 is the
-**bottom** row and register bit 7 the **rightmost** column, so v010.5 (which writes `SetRow` row
-*r* to register row *r*, MSB = `Col 7`) shows every pattern **rotated 180°** relative to its
-comments: `TraceDown` runs bottom to top, `OneTest` starts bottom left. The dev sketch turns the
-picture in `MapBoolGrid()` (D-24), so it appears as the comments describe.
+Canonical render used by the harness (**A-1 in `decisions.md`**): the panel **as installed** in
+a dome, row 0 at the top and columns printed left→right as `Col 7 … Col 0`, i.e. each `SetRow`
+byte printed MSB-first. In that position the patterns look as the comments describe
+(`TraceDown` top to bottom). Held on the bench the other way up, the panel shows everything
+rotated 180° (register row 0 at the bottom): what the owner first observed (D-24, D-25).
 
 ---
 

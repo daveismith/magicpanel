@@ -9,24 +9,23 @@
     "elf": {
       "absolute_repo_path_in_elf": false,
       "deterministic": true,
-      "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
-      "flash_bytes": 21202,
-      "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a",
-      "hex_sha256": "f1553b881d0a1fa9c4fa22623fe80f4e75bb8ae74431711d49ae47d97ad5e096",
+      "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f",
+      "flash_bytes": 18134,
+      "flash_sha256": "9b5cea576d356c1b1e2b66cd60841a63b48cd0a2235f7f3161dbae8ea3829dfc",
       "path": "build/firmware.elf",
       "second_build": {
-        "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
-        "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a"
+        "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f",
+        "flash_sha256": "9b5cea576d356c1b1e2b66cd60841a63b48cd0a2235f7f3161dbae8ea3829dfc"
       }
     },
     "firmware_git": {
       "dirty": true,
-      "sha": "e0f46c2ca08deb42ff1ac91e0eec827873a0ce16"
+      "sha": "5fbab370047ea4080733a11db18b0caefd268cba"
     },
     "sketch": {
-      "bytes": 57684,
+      "bytes": 40901,
       "path": "MagicPanel.ino",
-      "sha256": "8588c3784ef79875514a5e00f41172e94d2f8029e61bfecf9494fcc7459d2d42"
+      "sha256": "fa11e25d5d0022d2f0c0450e0735f99edbedb658b3d6852da22ef4d34f6e0bbf"
     },
     "toolchain": {
       "arduino_cli_commit": "01f3d4f2b",
@@ -53,7 +52,7 @@
       }
     }
   },
-  "canonical_hash": "a41a4363e1e6cc5fb42b91395f49e24ff9a64c80e2e8e3172b5facb3c882db06",
+  "canonical_hash": "ccf474019502c5ba5cc38c5dd2e3e4d97b8d056112e2bb2fc3935f9a9fb6a769",
   "counts": {
     "display_changes": 380,
     "empty_latches": 1,
@@ -79,14 +78,14 @@
       false
     ],
     "grid": [
-      "11111111",
-      "11111111",
-      "11111111",
-      "11111111",
-      "11111111",
-      "11110000",
       "00000000",
-      "00000000"
+      "00000000",
+      "00001111",
+      "11111111",
+      "11111111",
+      "11111111",
+      "11111111",
+      "11111111"
     ],
     "intensity": [
       15,
@@ -94,14 +93,14 @@
     ],
     "orphan_bits": 0,
     "rows_hex": [
-      "ff",
-      "ff",
-      "ff",
-      "ff",
-      "ff",
-      "f0",
       "00",
-      "00"
+      "00",
+      "0f",
+      "ff",
+      "ff",
+      "ff",
+      "ff",
+      "ff"
     ],
     "scan_limit": [
       7,
@@ -114,9 +113,9 @@
   },
   "firmware": {
     "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
-    "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce"
+    "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f"
   },
-  "harness_version": "0.2.0",
+  "harness_version": "0.1.0",
   "markers": [
     {
       "cycle": 1600001,
@@ -141,11 +140,11 @@
     "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
   },
   "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-gpio_interrupts_i2c/stimulus.script",
-  "settled_hash": "9b388a6554cef71bedd8b8aebd30b50e3324a62ea01a0a76c6692bbe2c0c636c",
-  "settled_states": 26,
-  "settled_timing_hash": "9c02b5760b2b9ceccbc0ca3e4434fe68e7e74f6d07102f0f6c8a881482190ba1",
+  "settled_hash": "62039155562b7e7dfaea66b18b85c7af5f2a411afae70d1ffb3568a4aa8f10ee",
+  "settled_states": 25,
+  "settled_timing_hash": "d18680b9592f1af80c622a4df1059976c25ab348f6792166be3c493563dd92ce",
   "status": "ok",
-  "timing_hash": "069d64942d82994ca56d7f2ad527a305427db260c228465c5acc1a56f2fba891",
-  "total_cycles": 96000000,
-  "total_ns": 6000000000.0
+  "timing_hash": "04a58138ef0469ba7b55142e32b0eccf270ee843ba115d6ba18bd787fc2822a4",
+  "total_cycles": 96000001,
+  "total_ns": 6000000062.5
 }

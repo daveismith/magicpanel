@@ -10,9 +10,10 @@ Firmware v010.5 and earlier understand only the legacy one-byte commands (sectio
 controller can tell the two apart by reading `WHO_AM_I` (section 6.1): older firmware answers
 `0x00 0x00`.
 
-Throughout this document and the pattern descriptions, *top*, *left* etc. are as seen on the
-panel mounted normally. Firmware v010.5 drew every pattern rotated 180°; v012.0 draws them the
-right way up (`CONFIG` bit 3 restores the old orientation).
+Throughout this document and the pattern descriptions, *top*, *left* etc. are as seen on a panel
+installed the usual way, where firmware v010.5's patterns appear as their names say (*Trace
+down* runs top to bottom). v012.0 draws the same way by default; for a panel installed the other
+way up, `ORIENTATION` (section 7) turns the picture 180°.
 
 ---
 
@@ -58,7 +59,7 @@ What a controller can do:
 
 ### 2.2 Register writes
 
-- **Plain registers** (`BRIGHTNESS`, `CONFIG`, `DEFAULT_BRIGHTNESS`, `INFO_INDEX`) take `d0` at
+- **Plain registers** (`BRIGHTNESS`, `CONFIG`, `DEFAULT_BRIGHTNESS`, `ORIENTATION`, `INFO_INDEX`) take `d0` at
   `reg`, `d1` at `reg+1`, and so on. A write that runs into a read-only or unmapped register is
   rejected as a whole.
 - **Action registers** (`START`, `STOP`, `SAVE`) take the whole payload as their argument list.
@@ -124,6 +125,7 @@ put `0x80 | reg` on the wire.
 | 0x22 | `BRIGHTNESS` | RW | 1 | 5.3 |
 | 0x30 | `CONFIG` | RW | 1 | 7 |
 | 0x31 | `DEFAULT_BRIGHTNESS` | RW | 1 | 7 |
+| 0x32 | `ORIENTATION` | RW | 1 | 7 |
 | 0x3F | `SAVE` | W | 1 | 7 |
 | 0x40 | `INFO_INDEX` | RW | 1 | 8 |
 | 0x41 | `INFO_FLAGS` | R | 1 | 8 |
@@ -219,7 +221,7 @@ Brightness `0` is dim, not off; use `STOP` with mode 0 to blank.
 | 0x03 | `PROTO_MINOR` | 0 — incremented for compatible additions |
 | 0x04–0x06 | `FW_MAJOR/MINOR/PATCH` | 0, 12, 0 (firmware v012.0; v011 was skipped, it is used by another Magic Panel firmware) |
 | 0x07 | `SEQ_COUNT` | 42 |
-| 0x08 | `CAPS` | `0x1F`: bit 0 legacy commands, bit 1 repeat/loop, bit 2 brightness, bit 3 catalogue names, bit 4 EEPROM configuration |
+| 0x08 | `CAPS` | `0x3F`: bit 0 legacy commands, bit 1 repeat/loop, bit 2 brightness, bit 3 catalogue names, bit 4 EEPROM configuration, bit 5 orientation |
 | 0x09 | `I2C_ADDR` | `0x14` |
 
 A controller should accept any `PROTO_MINOR` and refuse an unknown `PROTO_MAJOR`.
@@ -268,9 +270,10 @@ that its run was replaced by `RUN_COUNTER` moving past the value its own start p
 
 | Reg | Name | Factory | Meaning |
 |---|---|---|---|
-| 0x30 | `CONFIG` | `0x07` | bit 0 `LEGACY`: accept one-byte commands. bit 1 `GPIO_ENABLE`: the rotary switch and jumpers start modes. bit 2 `GPIO_RESUME`: a rotary/jumper mode restarts after an I2C sequence ends. bit 3 `ORIENT_V010`: draw as firmware v010.5 did, which is upside down on a normally mounted panel (for panels mounted the other way round). Bits 4–7 must be 0 (`BAD_VALUE`) |
+| 0x30 | `CONFIG` | `0x07` | bit 0 `LEGACY`: accept one-byte commands. bit 1 `GPIO_ENABLE`: the rotary switch and jumpers start modes. bit 2 `GPIO_RESUME`: a rotary/jumper mode restarts after an I2C sequence ends. Bits 3–7 must be 0 (`BAD_VALUE`) |
 | 0x31 | `DEFAULT_BRIGHTNESS` | 15 | brightness loaded at power-on, `0`–`15` |
-| 0x3F | `SAVE` | — | write `0xA5` to store `CONFIG` and `DEFAULT_BRIGHTNESS` in EEPROM; write `0x5A` to restore factory values and store them; anything else is `BAD_MAGIC` |
+| 0x32 | `ORIENTATION` | 0 | `0` as firmware v010.5; `1` turned 180°, for a panel installed the other way up. Other values: `BAD_VALUE`. Takes effect from the next frame drawn |
+| 0x3F | `SAVE` | — | write `0xA5` to store `CONFIG`, `DEFAULT_BRIGHTNESS` and `ORIENTATION` in EEPROM; write `0x5A` to restore factory values and store them; anything else is `BAD_MAGIC` |
 
 - Changes to `CONFIG` take effect immediately and last until reset unless saved.
   `DEFAULT_BRIGHTNESS` only matters at power-on; set `BRIGHTNESS` for an immediate change.
@@ -282,8 +285,9 @@ that its run was replaced by `RUN_COUNTER` moving past the value its own start p
   behaves exactly like v010.5.
 - EEPROM endurance is ~100 000 writes; save on configuration, not in a loop.
 
-EEPROM layout (bytes 0–4, for maintainers): `'M'`, layout version `1`, `CONFIG`,
-`DEFAULT_BRIGHTNESS`, checksum = XOR of bytes 0–3 XOR `0xA5`.
+EEPROM layout (bytes 0–5, for maintainers): `'M'`, layout version `2`, `CONFIG`,
+`DEFAULT_BRIGHTNESS`, `ORIENTATION`, checksum = XOR of bytes 0–4 XOR `0xA5`. Any other layout
+version loads the factory values.
 
 ---
 
@@ -322,20 +326,20 @@ command 3. Real hardware matches to within the 16 MHz crystal's tolerance.
 | 3 | `On 5s` | ENDS_LIT, HOLD | 5015 | all on 5 s, stays on |
 | 4 | `On 10s` | ENDS_LIT, HOLD | 10016 | all on 10 s, stays on |
 | 5 | `Toggle` | | 10172 | top/bottom halves alternate |
-| 6 | `Alert` | | 4570 | whole panel flashes, 4 s |
-| 7 | `Alert long` | | 11400 | whole panel flashes, 10 s |
-| 8 | `Trace up` | | 8360 | rows fill bottom to top |
-| 9 | `Trace up line` | | 8669 | one row moves bottom to top |
-| 10 | `Trace down` | | 8360 | rows fill top to bottom |
-| 11 | `Trace down line` | | 8669 | one row moves top to bottom |
+| 6 | `Alert` | | 4569 | whole panel flashes, 4 s |
+| 7 | `Alert long` | | 11398 | whole panel flashes, 10 s |
+| 8 | `Trace up` | | 8359 | rows fill bottom to top |
+| 9 | `Trace up line` | | 8668 | one row moves bottom to top |
+| 10 | `Trace down` | | 8359 | rows fill top to bottom |
+| 11 | `Trace down line` | | 8668 | one row moves top to bottom |
 | 12 | `Trace right` | | 8365 | columns fill left to right |
 | 13 | `Trace right line` | | 8365 | one column moves left to right |
 | 14 | `Trace left` | | 8365 | columns fill right to left |
 | 15 | `Trace left line` | | 8365 | one column moves right to left |
 | 16 | `Expand` | | 5213 | filled square grows from the centre |
-| 17 | `Expand ring` | | 5214 | ring grows from the centre |
+| 17 | `Expand ring` | | 5213 | ring grows from the centre |
 | 18 | `Compress` | | 5213 | filled square shrinks to the centre |
-| 19 | `Compress ring` | | 5214 | ring shrinks to the centre |
+| 19 | `Compress ring` | | 5213 | ring shrinks to the centre |
 | 20 | `Cross` | HOLD | 3024 | an X for 3 s |
 | 21 | `Cylon column` | | 4150 | column sweeps left-right |
 | 22 | `Cylon row` | | 4150 | row sweeps up-down |
@@ -347,7 +351,7 @@ command 3. Real hardware matches to within the 16 MHz crystal's tolerance.
 | 28 | `Flash quadrants` | | 3337 | diagonal quadrants alternate |
 | 29 | `Two loop` | | 5122 | two dots circle the panel |
 | 30 | `One loop` | | 5122 | one dot circles the panel |
-| 31 | `Test fill` | | 4838 | fill pixel by pixel, then clear |
+| 31 | `Test fill` | | 4837 | fill pixel by pixel, then clear |
 | 32 | `Test pixel` | | 2427 | one pixel walks the panel |
 | 33 | `Symbol AI` | HOLD | 3024 | Aurebesh "AI" logo, 3 s |
 | 34 | `Symbol 2GWD` | HOLD | 4047 | "2GWD" logo, letter by letter |
@@ -355,7 +359,7 @@ command 3. Real hardware matches to within the 16 MHz crystal's tolerance.
 | 36 | `Quadrant 2` | | 4247 | quadrants TR, TL, BL, BR |
 | 37 | `Quadrant 3` | | 4323 | quadrants TR, BR, BL, TL |
 | 38 | `Quadrant 4` | | 4323 | quadrants TL, BL, BR, TR |
-| 39 | `Random pixel` | RANDOM | 6638 | single random pixels |
+| 39 | `Random pixel` | RANDOM | 6636 | single random pixels |
 | 40 | `Random show` | LOOPS, RANDOM | indefinite | a random pattern about once a minute, dark in between (rotary 6, jumper 2) |
 | 41 | `Random show long` | LOOPS, RANDOM | indefinite | one random pattern, then dark: its long pause overflows (legacy behaviour, rotary 7) |
 
@@ -394,7 +398,7 @@ Bytes are shown as they go on the wire after the address.
 
 ```
 write [0x80]                 ; pointer := WHO_AM_I
-read 10  -> 4D 50 01 00 00 0C 00 2A 1F 14
+read 10  -> 4D 50 01 00 00 0C 00 2A 3F 14
             "MP" proto 1.0  fw 0.12.0  42 seqs  caps  addr
 ```
 

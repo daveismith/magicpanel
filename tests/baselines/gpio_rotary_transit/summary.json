@@ -9,24 +9,23 @@
     "elf": {
       "absolute_repo_path_in_elf": false,
       "deterministic": true,
-      "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
-      "flash_bytes": 21202,
-      "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a",
-      "hex_sha256": "f1553b881d0a1fa9c4fa22623fe80f4e75bb8ae74431711d49ae47d97ad5e096",
+      "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f",
+      "flash_bytes": 18134,
+      "flash_sha256": "9b5cea576d356c1b1e2b66cd60841a63b48cd0a2235f7f3161dbae8ea3829dfc",
       "path": "build/firmware.elf",
       "second_build": {
-        "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce",
-        "flash_sha256": "ac17cdd1967340dfa79e7eb532007891c6bf18e90930b6eb60cf8a32b11c516a"
+        "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f",
+        "flash_sha256": "9b5cea576d356c1b1e2b66cd60841a63b48cd0a2235f7f3161dbae8ea3829dfc"
       }
     },
     "firmware_git": {
       "dirty": true,
-      "sha": "e0f46c2ca08deb42ff1ac91e0eec827873a0ce16"
+      "sha": "5fbab370047ea4080733a11db18b0caefd268cba"
     },
     "sketch": {
-      "bytes": 57684,
+      "bytes": 40901,
       "path": "MagicPanel.ino",
-      "sha256": "8588c3784ef79875514a5e00f41172e94d2f8029e61bfecf9494fcc7459d2d42"
+      "sha256": "fa11e25d5d0022d2f0c0450e0735f99edbedb658b3d6852da22ef4d34f6e0bbf"
     },
     "toolchain": {
       "arduino_cli_commit": "01f3d4f2b",
@@ -53,7 +52,7 @@
       }
     }
   },
-  "canonical_hash": "2af6e5900d4c945456a198dd110189c4015b9687e8f2dd56d8f27e7c19b52201",
+  "canonical_hash": "59bd6db7b3693ff8eff35fe594ac91878b52ef1f9d35337b35ec8e5c6e89f9c4",
   "counts": {
     "display_changes": 105,
     "empty_latches": 1,
@@ -114,9 +113,9 @@
   },
   "firmware": {
     "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
-    "elf_sha256": "191027894cc5713093f210e7e17411639dc9ccbadd7819d2d46289ce8a122dce"
+    "elf_sha256": "c3f28a815ef7b0f910481d703f351a04a9f0f9b7ad276be54af8c5a96c77c68f"
   },
-  "harness_version": "0.2.0",
+  "harness_version": "0.1.0",
   "markers": [
     {
       "cycle": 0,
@@ -129,13 +128,13 @@
       "text": "gpio C2=0"
     },
     {
-      "cycle": 32000000,
-      "ns": 2000000000.0,
+      "cycle": 32000001,
+      "ns": 2000000062.5,
       "text": "gpio C2=1"
     },
     {
-      "cycle": 32080001,
-      "ns": 2005000062.5,
+      "cycle": 32080000,
+      "ns": 2005000000.0,
       "text": "gpio C1=1"
     },
     {
@@ -158,9 +157,9 @@
   "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-gpio_rotary_transit/stimulus.script",
   "settled_hash": "687a7570d46d6ddbe7e5d178e0dc039557c3d7c15e5a1a9af2f79533d869261e",
   "settled_states": 34,
-  "settled_timing_hash": "c5c0a7de0cd4d92bfab1a834862018c15203432f49bb4034571e8ad6cbb4f40f",
+  "settled_timing_hash": "8e3fc553cadcdc5934306249e82a0c253e3b354477a25f416ea66e372e1f67aa",
   "status": "ok",
-  "timing_hash": "b4e62f4565f6186933c3ea7735408ab3dcaaf2a0364d96cf6b7561438667461c",
+  "timing_hash": "4854f8978c0d035cb44b5ca8012961d7a91e948f7c1347d06a61d62b0426d8d4",
   "total_cycles": 80000000,
   "total_ns": 5000000000.0
 }

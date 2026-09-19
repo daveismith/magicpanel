@@ -90,10 +90,17 @@ def panel(panel_factory) -> Panel:
     return panel_factory()
 
 
-def eeprom_image(path: Path, cfg: int, bright: int, checksum: int | None = None) -> Path:
-    body = [ord("M"), 1, cfg, bright]
-    chk = checksum if checksum is not None else body[0] ^ body[1] ^ cfg ^ bright ^ 0xA5
-    path.write_bytes(bytes(body + [chk]) + b"\xff" * 1019)
+def ee_bytes(cfg: int, bright: int, orient: int = 0) -> list[int]:
+    """EEPROM layout 2 (spec section 7): magic, layout, CONFIG, DEFAULT_BRIGHTNESS, ORIENTATION, checksum."""
+    body = [ord("M"), 2, cfg, bright, orient]
+    return body + [body[0] ^ body[1] ^ cfg ^ bright ^ orient ^ 0xA5]
+
+
+def eeprom_image(path: Path, cfg: int, bright: int, orient: int = 0, checksum: int | None = None) -> Path:
+    body = ee_bytes(cfg, bright, orient)
+    if checksum is not None:
+        body[-1] = checksum
+    path.write_bytes(bytes(body) + b"\xff" * (1024 - len(body)))
     return path
 
 
@@ -101,7 +108,7 @@ def eeprom_image(path: Path, cfg: int, bright: int, checksum: int | None = None)
 def test_identity(panel):
     assert panel.read(C["MP_WHO_AM_I"], 10) == [
         C["MP_WHO_AM_I_0"], C["MP_WHO_AM_I_1"], C["MP_PROTO_MAJOR_VALUE"], C["MP_PROTO_MINOR_VALUE"], 0, 12, 0,
-        len(_spec_catalogue()), 0x1F, C["MP_I2C_ADDR"]]
+        len(_spec_catalogue()), 0x3F, C["MP_I2C_ADDR"]]
 
 
 def test_pointer_persists_and_unmapped_reads_zero(panel):
@@ -285,15 +292,17 @@ def test_catalogue_index_out_of_range(panel):
 
 
 # ---------------------------------------------------------------------------------- orientation
-@pytest.mark.parametrize("cfg,row,pixel", [
-    (C["MP_CONFIG_DEFAULT"], 0, "00000001"),                         # right way up: top right first
-    (C["MP_CONFIG_DEFAULT"] | C["MP_CFG_ORIENT_V010"], 7, "10000000"),  # v010.5: bottom left first
+@pytest.mark.parametrize("orient,row,pixel", [
+    ("MP_ORIENT_NORMAL", 0, "00000001"),        # as v010.5 / as installed: top right first
+    ("MP_ORIENT_ROTATE_180", 7, "10000000"),    # turned: bottom left first
 ])
-def test_orientation(panel, cfg, row, pixel):
-    """Test pixel (32) lights VMagicPanel[0][0] first: the top-right LED as seen on a normally
-    mounted panel (checked on hardware: v010.5 lit the bottom-left one)."""
-    panel.write(C["MP_REG_BIT"] | C["MP_CONFIG"], cfg)
+def test_orientation(panel, orient, row, pixel):
+    """Test pixel (32) lights VMagicPanel[0][0] first: the top-right LED of a panel installed the
+    usual way (A-1); ORIENTATION = 1 turns the picture 180 degrees."""
+    panel.write(C["MP_REG_BIT"] | C["MP_ORIENTATION"], C[orient])
+    assert panel.reg(C["MP_ORIENTATION"]) == C[orient]
     panel.start(32)
+    panel.step(15)                                              # allOFF frame, then the first pixel
     grid = panel.display()["ascii"]
     assert grid[row] == pixel.replace("1", "#").replace("0", ".")
     assert sum(r.count("#") for r in grid) == 1
@@ -322,7 +331,8 @@ def test_brightness(panel):
     ([0x80 | 0x20, 20, 1, 2], "MP_ERR_BAD_VALUE"),
     ([0x80 | 0x21, 2], "MP_ERR_BAD_VALUE"),
     ([0x80 | 0x21, 0, 0], "MP_ERR_BAD_LENGTH"),
-    ([0x80 | 0x30, 0x10], "MP_ERR_BAD_VALUE"),
+    ([0x80 | 0x30, 0x08], "MP_ERR_BAD_VALUE"),
+    ([0x80 | 0x32, 2], "MP_ERR_BAD_VALUE"),
     ([0x80 | 0x3F, 0x00], "MP_ERR_BAD_MAGIC"),
     ([0x80 | 0x31] + [1] * 9, "MP_ERR_BAD_LENGTH"),
     ([20, 5], "MP_ERR_BAD_LENGTH"),
@@ -366,14 +376,14 @@ def test_address_only_write_is_harmless(panel):
 def test_save_and_reload(panel_factory, tmp_path):
     out = tmp_path / "ee.bin"
     p = panel_factory(eeprom_out=out)
-    p.write(C["MP_REG_BIT"] | C["MP_CONFIG"], C["MP_CFG_GPIO_ENABLE"], 8)   # CONFIG, DEFAULT_BRIGHTNESS
+    p.write(C["MP_REG_BIT"] | C["MP_CONFIG"], C["MP_CFG_GPIO_ENABLE"], 8, C["MP_ORIENT_ROTATE_180"])  # 0x30..0x32
     p.write(C["MP_REG_BIT"] | C["MP_SAVE"], C["MP_SAVE_MAGIC"])
     p.step(50)
     p.close()
-    ee = out.read_bytes()
-    assert list(ee[:5]) == [ord("M"), 1, 0x02, 8, ord("M") ^ 1 ^ 0x02 ^ 8 ^ 0xA5]
+    assert list(out.read_bytes()[:6]) == ee_bytes(0x02, 8, 1)
     q = panel_factory(eeprom=out)
-    assert (q.reg(C["MP_CONFIG"]), q.reg(C["MP_DEFAULT_BRIGHTNESS"]), q.reg(C["MP_BRIGHTNESS"])) == (0x02, 8, 8)
+    assert (q.reg(C["MP_CONFIG"]), q.reg(C["MP_DEFAULT_BRIGHTNESS"]), q.reg(C["MP_BRIGHTNESS"]),
+            q.reg(C["MP_ORIENTATION"])) == (0x02, 8, 8, C["MP_ORIENT_ROTATE_180"])
     assert q.display()["intensity"] == [8, 8]
     q.write(20)
     assert q.status()["last_error"] == C["MP_ERR_LEGACY_OFF"]
@@ -381,18 +391,31 @@ def test_save_and_reload(panel_factory, tmp_path):
 
 def test_factory_restore(panel_factory, tmp_path):
     out = tmp_path / "ee.bin"
-    p = panel_factory(eeprom=eeprom_image(tmp_path / "in.bin", 0x00, 3), eeprom_out=out)
-    assert p.reg(C["MP_CONFIG"]) == 0x00
+    p = panel_factory(eeprom=eeprom_image(tmp_path / "in.bin", 0x00, 3, 1), eeprom_out=out)
+    assert (p.reg(C["MP_CONFIG"]), p.reg(C["MP_ORIENTATION"])) == (0x00, 1)
     p.write(C["MP_REG_BIT"] | C["MP_SAVE"], C["MP_FACTORY_MAGIC"])
     p.step(50)
-    assert (p.reg(C["MP_CONFIG"]), p.reg(C["MP_DEFAULT_BRIGHTNESS"])) == (C["MP_CONFIG_DEFAULT"], 15)
+    assert (p.reg(C["MP_CONFIG"]), p.reg(C["MP_DEFAULT_BRIGHTNESS"]), p.reg(C["MP_ORIENTATION"])) == (
+        C["MP_CONFIG_DEFAULT"], 15, C["MP_ORIENT_NORMAL"])
     p.close()
-    assert list(out.read_bytes()[:5]) == [ord("M"), 1, 0x07, 15, ord("M") ^ 1 ^ 0x07 ^ 15 ^ 0xA5]
+    assert list(out.read_bytes()[:6]) == ee_bytes(0x07, 15, 0)
 
 
 def test_corrupt_eeprom_loads_factory_values(panel_factory, tmp_path):
-    p = panel_factory(eeprom=eeprom_image(tmp_path / "bad.bin", 0x00, 3, checksum=0))
-    assert (p.reg(C["MP_CONFIG"]), p.reg(C["MP_DEFAULT_BRIGHTNESS"])) == (C["MP_CONFIG_DEFAULT"], 15)
+    p = panel_factory(eeprom=eeprom_image(tmp_path / "bad.bin", 0x00, 3, 1, checksum=0))
+    assert (p.reg(C["MP_CONFIG"]), p.reg(C["MP_DEFAULT_BRIGHTNESS"]), p.reg(C["MP_ORIENTATION"])) == (
+        C["MP_CONFIG_DEFAULT"], 15, C["MP_ORIENT_NORMAL"])
+
+
+def test_rotation_saved_in_eeprom_applies_at_power_on(firmware, harness, tmp_path):
+    p = Panel(firmware, tmp_path / "run", eeprom=eeprom_image(tmp_path / "in.bin", C["MP_CONFIG_DEFAULT"], 15, 1))
+    try:
+        p.step(30)
+        p.write(32)                                             # legacy: Test pixel
+        p.step(15)
+        assert p.display()["ascii"][7] == "#......."             # bottom left first when turned
+    finally:
+        p.close()
 
 
 def test_gpio_disabled_in_eeprom_ignores_jumper_at_power_on(firmware, harness, tmp_path):

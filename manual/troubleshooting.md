@@ -34,5 +34,5 @@
   ([error codes](reference/i2c-protocol.md#62-status-0x100x1f)).
 
 **Patterns are upside down.**
-: Your panel is probably mounted the other way round. Set `CONFIG` bit 3 to rotate the picture
-  180° ([how](connect/wiring.md#orientation)).
+: Your panel is installed the other way up from the usual. Turn the picture 180° with the
+  `ORIENTATION` register ([how](connect/wiring.md#orientation)).
