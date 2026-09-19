@@ -12,30 +12,16 @@ Download `MagicPanel-vX.Y.Z.hex` from the release that matches these pages
 shasum -a 256 -c SHA256SUMS --ignore-missing
 ```
 
-## 2. Connect a programmer
+## 2. Connect a USB-serial adapter
 
-=== "USB-serial adapter (bootloader)"
+The firmware is loaded through the panel's serial bootloader. Connect a 5 V USB-serial adapter
+(FTDI or similar, with DTR for auto-reset) to the panel's serial programming header.
 
-    Connect a 5 V USB-serial adapter (FTDI or similar, with DTR for auto-reset) to the panel's
-    serial programming header.
-
-    TODO(owner): header location, pin order and a photo.
-
-=== "ISP programmer"
-
-    Connect a 5 V ISP programmer (USBasp, AVRISP mkII, an Arduino as ISP…) to the panel's 6-pin
-    ISP header.
-
-    TODO(owner): header location and orientation.
-
-    !!! warning
-        Writing flash over ISP erases the chip, **including the bootloader**. That is fine if you
-        always use ISP; to keep serial uploads working, reflash the bootloader afterwards
-        (Arduino IDE: *Tools → Burn Bootloader* with the Duemilanove/Diecimila board selected).
+TODO(owner): header location, pin order and a photo.
 
 ## 3. Upload
 
-=== "avrdude, serial"
+=== "avrdude"
 
     ```sh
     avrdude -p m328p -c arduino -b 57600 -P /dev/ttyUSB0 \
@@ -44,28 +30,27 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 
     Use the adapter's port (`/dev/cu.usbserial-…` on macOS, `COM3` etc. on Windows).
 
-=== "avrdude, ISP"
-
-    ```sh
-    avrdude -p m328p -c usbasp -U flash:w:MagicPanel-vX.Y.Z.hex:i
-    ```
-
-    Replace `usbasp` with your programmer (`avrispmkII`, `stk500v1 -b 19200 -P …` for Arduino as ISP).
-
 === "Arduino IDE, from source"
 
     1. Install the **LedControl** library, version 1.0.6.
     2. Open `MagicPanel.ino` from the repository at the release tag.
     3. *Tools → Board*: **Arduino Duemilanove or Diecimila**; *Processor*: **ATmega328P**.
-    4. Upload.
+    4. Choose the adapter's port and click **Upload**.
 
 === "Command line, from source"
 
     ```sh
     git clone --recursive https://github.com/daveismith/magicpanel && cd magicpanel
     git checkout vX.Y.Z
-    make setup firmware          # pinned toolchain; the hex is written to build/
+    make setup firmware          # pinned toolchain; writes build/firmware.hex
     ```
+
+    Then upload `build/firmware.hex` with the avrdude command from the first tab.
+
+!!! warning "Keep the bootloader"
+    Always upload through the serial bootloader as above. Don't use *Upload Using Programmer* or
+    *Burn Bootloader*, or program the chip with an ISP programmer: those erase or replace the
+    bootloader, and the panel can then no longer be updated over serial.
 
 ## 4. Check it
 
