@@ -51,7 +51,10 @@ markdown_extensions:
   - toc:
       permalink: true
   - pymdownx.details
+  - def_list
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
   - pymdownx.snippets:
       base_path: ["."]
       check_paths: true
@@ -60,6 +63,7 @@ nav:
   - Home: index.md
   - Get started:
       - Flashing the firmware: install/flashing.md
+      - Downloads: install/downloads.md
       - Wiring: connect/wiring.md
       - Upgrading from v010.5: upgrading.md
   - Use:
@@ -69,3 +73,4 @@ nav:
       - Troubleshooting: troubleshooting.md
   - Reference:
       - I2C protocol: reference/i2c-protocol.md
+      - Changelog: changelog.md

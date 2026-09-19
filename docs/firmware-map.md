@@ -328,8 +328,12 @@ triggers this (`first_time`, L163-167).
 mode 1 has no case and mode 0 is "off"), state 1 runs that pattern once (same functions as the
 I2C table, but numbered differently: e.g. mode 3 = Toggle, mode 26 = Symbol, mode 31 =
 RandomPixel), state 2 holds the panel off for `RandomInterval` **loop passes** (not ms; each pass
-is ≈ 8 ms because `allOFF()` re-sends the grid, so 8000-14000 passes ≈ 60-110 s and
-40000-60000 ≈ 5-8 min).
+is ≈ 8 ms because `allOFF()` re-sends the grid, so 8000-14000 passes ≈ 60-110 s; the interval
+is redrawn every pass, so the pause ends near the low end, about 63 s in the dev sketch).
+**40000-60000 overflows**: `Random(int)` receives it as a negative 16-bit `int`, which the
+comparison with the `unsigned long` counter turns into ~4.29 × 10⁹, so mode 7 plays one pattern
+and then stays dark practically forever (measured with the dev sketch; same arithmetic in the
+specimen). Every I2C write resets the counter too (L1827-1828), restarting the pause.
 
 ### 4.2 Serial
 

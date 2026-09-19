@@ -175,6 +175,10 @@ main-loop engine introduced in the development sketch, see `docs/decisions.md` D
 - An iteration is one complete run of the sequence as listed in the catalogue, including the
   panel clear before/after that most sequences do.
 - The random shows (IDs 40, 41) never end by themselves; `repeat` is ignored for them.
+- **Every write** to the panel (including the pointer write before a status read) restarts the
+  random show's dark pause, as v010.5's handler did. Polling a random show every few seconds
+  therefore keeps it dark; poll rarely, or not at all, while one runs. Reads alone do not
+  affect it.
 - When the run ends and a rotary/jumper mode is selected, that mode restarts (`SOURCE =
   GPIO_RESUME`) unless `CONFIG.GPIO_RESUME` is clear. The finished run's result is then no
   longer visible in `STATE`; compare `RUN_COUNTER` (section 6.2).
@@ -348,8 +352,8 @@ command 3. Real hardware matches to within the 16 MHz crystal's tolerance.
 | 37 | `Quadrant 3` | | 4323 | quadrants TR, BR, BL, TL |
 | 38 | `Quadrant 4` | | 4323 | quadrants TL, BL, BR, TR |
 | 39 | `Random pixel` | RANDOM | 6636 | single random pixels |
-| 40 | `Random show` | LOOPS, RANDOM | indefinite | random patterns with 8–14 s pauses (rotary 6, jumper 2) |
-| 41 | `Random show long` | LOOPS, RANDOM | indefinite | random patterns with longer pauses (rotary 7) |
+| 40 | `Random show` | LOOPS, RANDOM | indefinite | a random pattern about once a minute, dark in between (rotary 6, jumper 2) |
+| 41 | `Random show long` | LOOPS, RANDOM | indefinite | one random pattern, then dark: its long pause overflows (legacy behaviour, rotary 7) |
 
 ---
 
