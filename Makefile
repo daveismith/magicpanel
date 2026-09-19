@@ -6,7 +6,7 @@ SCENARIO ?=
 RUN_ARGS ?=
 PYTEST_ARGS ?= -v
 
-.PHONY: setup venv firmware reference check-specimen harness scenarios baseline rebaseline compare test test-fast determinism mutants spikes gif gifs clean help
+.PHONY: docs-setup docs-gen docs-build docs-serve docs-preview-versions setup venv firmware reference check-specimen harness scenarios baseline rebaseline compare test test-fast determinism mutants spikes gif gifs clean help
 
 help:             ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -75,3 +75,19 @@ spikes:           ## Phase 1 spikes against the precompiled ELF
 clean:
 	rm -rf build runs
 	$(MAKE) -C spikes clean; $(MAKE) -C harness clean
+
+# ---- user documentation site (mkdocs.yml, manual/; Zensical, see RELEASING.md) ----
+docs-setup: venv  ## install the pinned docs toolchain (requirements-docs.txt)
+	@$(PY) -m pip install -q -r requirements-docs.txt
+
+docs-gen:         ## write the generated parts of the site (manual/generated/, the protocol header)
+	@cp docs/magicpanel_i2c.h manual/reference/magicpanel_i2c.h
+
+docs-build: docs-gen ## build the site strictly -> build/site/
+	.venv/bin/zensical build --strict --clean
+
+docs-serve: docs-gen ## serve the site locally with live reload
+	.venv/bin/zensical serve
+
+docs-preview-versions: ## serve the local gh-pages branch with the version switcher (after mike deploy)
+	.venv/bin/mike serve

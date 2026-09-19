@@ -1,0 +1,65 @@
+# User documentation site, built with Zensical (reads this file; decision D-23). Hand-written
+# pages live in manual/; manual/generated/ and manual/reference/magicpanel_i2c.h are written by
+# `make docs-gen`. Versions are published with mike (RELEASING.md). Zensical runs no MkDocs
+# plugins or hooks, so anything generated comes from tools/, never from build-time plugins.
+site_name: Magic Panel
+site_description: Firmware, wiring and I2C control for the IA-PARTS Magic Panel
+repo_url: https://github.com/daveismith/magicpanel
+repo_name: daveismith/magicpanel
+edit_uri: edit/main/manual/
+docs_dir: manual
+site_dir: build/site
+strict: true
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: red
+      accent: amber
+      toggle: { icon: material/weather-night, name: Dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: red
+      accent: amber
+      toggle: { icon: material/weather-sunny, name: Light mode }
+
+extra:
+  version:
+    provider: mike
+    default: latest
+    alias: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
+
+nav:
+  - Home: index.md
+  - Get started:
+      - Flashing the firmware: install/flashing.md
+      - Wiring: connect/wiring.md
+      - Upgrading from v010.5: upgrading.md
+  - Use:
+      - Standalone (rotary & jumpers): use/standalone.md
+      - I2C quick start: use/i2c-quickstart.md
+      - Troubleshooting: troubleshooting.md
+  - Reference:
+      - I2C protocol: reference/i2c-protocol.md

@@ -199,3 +199,25 @@ counters it corrupted no longer exist. No baseline depended on it.
   ATmega slave reports the same TWSR sequence for a repeated START as for STOP+START (0xA0,
   then 0xA8), so the firmware path under test is identical. `--eeprom-out` dumps the final
   EEPROM, so `SAVE` can be checked.
+
+**D-23 — User documentation site: Zensical + mike, versioned on `gh-pages` (2026-09-19, owner
+decision).** The user docs are built from `mkdocs.yml` + `manual/` with **Zensical 0.0.63**.
+Owner decisions: releases and `dev` are published, but not v010.5; each pattern gets a GIF plus an
+interactive player; the site starts on github.io, and a custom domain comes later (see
+RELEASING.md).
+- *Why Zensical and not MkDocs.* The plan chose MkDocs 1.6 + Material. At setup, Material 9.7.7
+  warned that MkDocs 2.0 drops plugins and themes and will not be supported, and that MkDocs 1.x
+  is unmaintained. The owner chose to start on Zensical, the Material team's successor, rather
+  than migrate later. Zensical reads `mkdocs.yml` and the pymdownx extensions (the spec is
+  included with snippets) and supports `--strict`.
+- *Constraint.* Zensical runs **no MkDocs plugins or hooks**, and ignores them silently.
+  Everything generated (pattern pages, GIFs, player data, the protocol header copy) is written
+  into `manual/` by `make docs-gen` before the build; nothing depends on build-time plugins.
+- *Versioning.* mike is used as Zensical's maintained fork, installed from git and pinned to
+  commit `0f62791` (tag `2.2.0+zensical-0.1.0`), per the repo's pin-by-SHA rule. It is described
+  as transitional until Zensical has native versioning. Switch when that lands; the `gh-pages`
+  layout (`versions.json`, one directory per version) is what the switcher reads either way.
+  Dry run: `mike deploy --update-aliases 0.11 latest`, `mike deploy dev` and
+  `mike set-default latest` produce the expected branch.
+- *Pins kept apart.* The docs dependencies are in `requirements-docs.txt` (`make docs-setup`), so
+  the harness/CI regression venv (`requirements.txt`) stays minimal.
