@@ -4,7 +4,7 @@ Everything here is deterministic and free of wall-clock reads except `now_iso()`
 used only for baseline capture metadata (never in a comparison path).
 """
 from __future__ import annotations
-import hashlib, json, os, shutil, subprocess, sys
+import hashlib, json, os, re, shutil, subprocess, sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -51,8 +51,25 @@ I2C_COMMANDS = {
     35: ("Quadrant(5,1) TL,TR,BR,BL", 4000), 36: ("Quadrant(5,2) TR,TL,BL,BR", 4000),
     37: ("Quadrant(5,3) TR,BR,BL,TL", 4000), 38: ("Quadrant(5,4) TL,BL,BR,TR", 4000),
     39: ("RandomPixel(40)", 6000),
+    # v010.6/v011 sequences (TheJugg1er), kept under v011's numbers
+    40: ("Countdown() 9 to 0", 10100), 41: ("ShortCountdown() 3 to 0", 4100),
+    42: ("RandomAlert(20) flicker", 2200), 43: ("RandomAlert(40) flicker long", 4300),
+    44: ("Smile", 1100), 45: ("Sad face", 1100), 46: ("Heart", 1100),
+    47: ("CheckerBoard(8,200)", 3400),
+    48: ("compressIN(5,1)", 4100), 49: ("compressIN(5,2) with clear", 8200),
+    50: ("explodeOUT(5,1)", 4600), 51: ("explodeOUT(5,2) with clear", 9200),
+    52: ("VUMeter(15,1) columns from bottom", 4800), 53: ("VUMeter(15,2) rows from left", 4800),
+    54: ("VUMeter(15,3) columns from top", 4800), 55: ("VUMeter(15,4) rows from right", 4800),
 }
 SLAVE_ADDR = 0x14
+I2C_HEADER = REPO / "docs" / "magicpanel_i2c.h"
+
+
+def header_constants() -> dict[str, int]:
+    """The numeric MP_* constants of docs/magicpanel_i2c.h."""
+    return {m.group(1): int(m.group(2), 0) for m in
+            re.finditer(r"^#define\s+(MP_\w+)\s+(0x[0-9A-Fa-f]+|\d+)U?L?\b", I2C_HEADER.read_text(), re.M)}
+
 # Protocol v1 register names for scenario markers (docs/magicpanel_i2c.h is authoritative)
 I2C_REGISTERS = {0x10: "STATUS", 0x20: "START", 0x21: "STOP", 0x22: "BRIGHTNESS", 0x30: "CONFIG",
                  0x31: "DEFAULT_BRIGHTNESS", 0x3F: "SAVE", 0x40: "INFO_INDEX"}

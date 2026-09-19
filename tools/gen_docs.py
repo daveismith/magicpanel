@@ -27,8 +27,8 @@ from render_gif import render_records
 SPEC = mplib.REPO / "docs" / "i2c-protocol.md"
 REPO_URL = "https://github.com/daveismith/magicpanel"
 REG_BIT, REG_STATUS, REG_START, REG_INFO = 0x80, 0x10, 0x20, 0x40
-FLAGS = {0x01: "Loops", 0x02: "Random", 0x04: "Ends lit", 0x08: "Static image"}
-LOOPS, RANDOM, ENDS_LIT = 0x01, 0x02, 0x04
+FLAGS = {0x01: "Loops", 0x02: "Random", 0x04: "Ends lit", 0x08: "Static image", 0x10: "Length varies"}
+LOOPS, RANDOM, ENDS_LIT, VARIES = 0x01, 0x02, 0x04, 0x10
 INDEFINITE = 0xFFFFFFFF
 RECORD_LOOPING_MS = 30_000        # random shows: one pattern and the start of the pause
 RECORD_MAX_MS = 20_000            # command 1 holds for 1000 s; show its start only
@@ -135,7 +135,7 @@ def how_to_start(seq: dict, codes: list[int]) -> str:
     lines = ["| From | How |", "|---|---|",
              f"| I2C register | write `[0xA0, {sid}]` (0x{sid:02X}); add a repeat count and end action as needed "
              f"([START](../../../reference/i2c-protocol.md#51-start-0x20-w-13-bytes)) |"]
-    if sid < 40:
+    if sid <= mplib.header_constants()["MP_LEGACY_LAST"]:
         lines.append(f"| I2C legacy (MarcDuino, Stealth…) | the single byte `{sid}` |")
     for c in codes:
         lines.append(f"| Rotary switch / jumper | code {c} ({mode_input(c)}), looping |")
@@ -154,6 +154,9 @@ def pattern_page(seq: dict, desc: str, codes: list[int], fw: str) -> str:
     if seq["flags"] & ENDS_LIT:
         notes.append("The panel stays lit when the sequence ends (as in the original firmware); start `All off` "
                      "or use `end = 1` with the START register to blank it.")
+    if seq["flags"] & VARIES:
+        notes.append("It waits for random times, so the length above is typical: each run is a little "
+                     "longer or shorter.")
     if seq["flags"] & LOOPS:
         notes.append("It never ends by itself; the recording shows the first 30 s. Stop it with the STOP register "
                      "or start another sequence.")

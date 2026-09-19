@@ -6,9 +6,10 @@ controller, a test rig, a Python script) and maintainers of `MagicPanel.ino`, wh
 Constants for C/C++ controllers are in [`magicpanel_i2c.h`](magicpanel_i2c.h); that header is
 normative for the numeric values below and is what the firmware test-suite uses.
 
-Firmware v010.5 and earlier understand only the legacy one-byte commands (section 4). A
-controller can tell the two apart by reading `WHO_AM_I` (section 6.1): older firmware answers
-`0x00 0x00`.
+Firmware v010.5 and earlier understand only the legacy one-byte commands (section 4);
+v010.6/v011 understand only their own JawaLite `T` command (`['T', seq]`), which this protocol
+does not accept. A controller can tell them apart from v012.0 by reading `WHO_AM_I` (section
+6.1): older firmware answers `0x00 0x00`.
 
 Throughout this document and the pattern descriptions, *top*, *left* etc. are as seen on a panel
 installed the usual way, where firmware v010.5's patterns appear as their names say (*Trace
@@ -28,7 +29,7 @@ way up, `ORIENTATION` (section 7) turns the picture 180°.
 | Register access | byte 0 = `0x80 | reg` (command bit 7 set), `reg` = 0x00–0x7F |
 | Max write | register byte + 8 data bytes |
 | Max read | 32 bytes per transaction |
-| Legacy | one byte `0`–`39` runs that sequence, while `CONFIG.LEGACY` is set (factory default) |
+| Legacy | one byte `0`–`55` runs that sequence, while `CONFIG.LEGACY` is set (factory default) |
 
 What a controller can do:
 
@@ -143,11 +144,12 @@ Every address not listed reads `0x00` and rejects writes with `UNKNOWN_REG`.
 For compatibility with existing controllers (MarcDuino, Stealth, …), while `CONFIG.LEGACY` is
 set (the factory default):
 
-- a **one-byte** write of `0`–`39` is exactly `START seq=byte, repeat=1, end=default`, with
-  `SOURCE = LEGACY`. The panel shows what firmware v010.5 showed, with the same timing
-  (within 0.5 ms), including its quirks: commands 1–4 leave the panel lit, command 2 runs 2 s
-  and then 5 s;
-- a one-byte write of `40`–`127` does nothing, as before, and is not an error.
+- a **one-byte** write of `0`–`55` is exactly `START seq=byte, repeat=1, end=default`, with
+  `SOURCE = LEGACY`. For `0`–`39` the panel shows what firmware v010.5 showed, with the same
+  timing (within 0.5 ms), including its quirks: commands 1–4 leave the panel lit, command 2
+  runs 2 s and then 5 s. `40`–`55` are the sequences firmware v010.6/v011 added, numbered as
+  there (v011 itself starts them with its own `T` command, not a single byte);
+- a one-byte write of `56`–`127` does nothing, as before, and is not an error.
 
 With `CONFIG.LEGACY` clear, every write whose byte 0 has bit 7 clear is ignored and records
 `LEGACY_OFF`.
@@ -180,7 +182,7 @@ main-loop engine introduced in the development sketch, see `docs/decisions.md` D
   (`RUN_COUNTER` tells a controller that its own run was replaced).
 - An iteration is one complete run of the sequence as listed in the catalogue, including the
   panel clear before/after that most sequences do.
-- The random shows (IDs 40, 41) never end by themselves; `repeat` is ignored for them.
+- The random shows (IDs 56, 57) never end by themselves; `repeat` is ignored for them.
 - **Every write** to the panel (including the pointer write before a status read) restarts the
   random show's dark pause, as v010.5's handler did. Polling a random show every few seconds
   therefore keeps it dark; poll rarely, or not at all, while one runs. Reads alone do not
@@ -219,8 +221,8 @@ Brightness `0` is dim, not off; use `STOP` with mode 0 to blank.
 | 0x00–0x01 | `WHO_AM_I` | `0x4D 0x50` (`"MP"`) |
 | 0x02 | `PROTO_MAJOR` | 1 — incremented for incompatible changes |
 | 0x03 | `PROTO_MINOR` | 0 — incremented for compatible additions |
-| 0x04–0x06 | `FW_MAJOR/MINOR/PATCH` | 0, 12, 0 (firmware v012.0; v011 was skipped, it is used by another Magic Panel firmware) |
-| 0x07 | `SEQ_COUNT` | 42 |
+| 0x04–0x06 | `FW_MAJOR/MINOR/PATCH` | 0, 12, 0 (firmware v012.0, which follows v011) |
+| 0x07 | `SEQ_COUNT` | 58 |
 | 0x08 | `CAPS` | `0x3F`: bit 0 legacy commands, bit 1 repeat/loop, bit 2 brightness, bit 3 catalogue names, bit 4 EEPROM configuration, bit 5 orientation |
 | 0x09 | `I2C_ADDR` | `0x14` |
 
@@ -306,7 +308,7 @@ An ID ≥ `SEQ_COUNT` records `BAD_VALUE` and leaves `INFO_INDEX` unchanged.
 | Offset | Field | Meaning |
 |---|---|---|
 | 0 | `INFO_INDEX` | the ID described |
-| 1 | `INFO_FLAGS` | bit 0 `LOOPS` (never ends by itself), bit 1 `RANDOM` (content depends on the pseudo-random generator, differs between runs), bit 2 `ENDS_LIT` (panel is left on at the end), bit 3 `HOLD` (static image(s)) |
+| 1 | `INFO_FLAGS` | bit 0 `LOOPS` (never ends by itself), bit 1 `RANDOM` (content depends on the pseudo-random generator, differs between runs), bit 2 `ENDS_LIT` (panel is left on at the end), bit 3 `HOLD` (static image(s)), bit 4 `VARIES` (the length differs from run to run: treat `INFO_LENGTH_MS` as typical, ±10%, and poll `STATE` instead of relying on it) |
 | 2–5 | `INFO_LENGTH_MS` | length of one iteration in ms, measured, including frame transfer time; `0xFFFFFFFF` for `LOOPS` |
 | 6–21 | `INFO_NAME` | ASCII, NUL-padded, no terminator if exactly 16 characters |
 
@@ -316,7 +318,7 @@ Lengths are what `INFO_LENGTH_MS` returns. They are measured, not computed from 
 delays: `tools/measure_lengths.py` starts each sequence on the simulated panel and reads the
 firmware's own `ELAPSED_MS` at completion, so they include the ~7.5 ms it takes to clock out
 each frame (which is why, say, Alert is 4.6 s rather than 4 s). Command 1 is derived from
-command 3. Real hardware matches to within the 16 MHz crystal's tolerance.
+command 3. Sequences flagged `VARIES` wait for random times, so their length is only typical. Real hardware matches to within the 16 MHz crystal's tolerance.
 
 | ID | Name | Flags | Length (ms) | What it shows |
 |---|---|---|---|---|
@@ -359,9 +361,25 @@ command 3. Real hardware matches to within the 16 MHz crystal's tolerance.
 | 36 | `Quadrant 2` | | 4247 | quadrants TR, TL, BL, BR |
 | 37 | `Quadrant 3` | | 4323 | quadrants TR, BR, BL, TL |
 | 38 | `Quadrant 4` | | 4323 | quadrants TL, BL, BR, TR |
-| 39 | `Random pixel` | RANDOM | 6636 | single random pixels |
-| 40 | `Random show` | LOOPS, RANDOM | indefinite | a random pattern about once a minute, dark in between (rotary 6, jumper 2) |
-| 41 | `Random show long` | LOOPS, RANDOM | indefinite | one random pattern, then dark: its long pause overflows (legacy behaviour, rotary 7) |
+| 39 | `Random pixel` | RANDOM | 6638 | single random pixels |
+| 40 | `Countdown 9` | | 10085 | digits 9 down to 0, one a second |
+| 41 | `Countdown 3` | | 4039 | digits 3 down to 0, one a second |
+| 42 | `Flicker` | RANDOM, VARIES | 2092 | whole panel flickers at random, like the MarcDuino alert |
+| 43 | `Flicker long` | RANDOM, VARIES | 4228 | the same, twice as long |
+| 44 | `Smile` | HOLD | 1023 | smiley face, 1 s |
+| 45 | `Sad face` | HOLD | 1023 | sad face, 1 s |
+| 46 | `Heart` | HOLD | 1023 | heart, 1 s |
+| 47 | `Checkerboard` | | 3341 | 2×2 checkerboard flashes |
+| 48 | `Compress in` | | 4076 | halves fill from the top-left and bottom-right corners, half a row at a time |
+| 49 | `Compress in wipe` | | 8099 | the same, each fill then cleared in the same order |
+| 50 | `Explode out` | | 4576 | panel fills from the centre out, half a row at a time |
+| 51 | `Explode out wipe` | | 9099 | the same, each fill then cleared in the same order |
+| 52 | `VU meter bottom` | RANDOM | 4710 | bouncing bars rising from the bottom |
+| 53 | `VU meter left` | RANDOM | 4710 | bouncing bars from the left |
+| 54 | `VU meter top` | RANDOM | 4709 | bouncing bars hanging from the top |
+| 55 | `VU meter right` | RANDOM | 4710 | bouncing bars from the right |
+| 56 | `Random show` | LOOPS, RANDOM | indefinite | a random pattern about once a minute, dark in between (rotary 6, jumper 2) |
+| 57 | `Random show long` | LOOPS, RANDOM | indefinite | one random pattern, then dark: its long pause overflows (legacy behaviour, rotary 7) |
 
 ---
 
@@ -379,10 +397,10 @@ selected code appears in `GPIO_CODE`; the mode it runs appears in the status blo
 | 3 | rotary 3 | 29 Two loop |
 | 4 | rotary 4 | 10 Trace down |
 | 5 | rotary 5 | 32 Test pixel |
-| 6 | rotary 6 | 40 Random show |
-| 7 | rotary 7 | 41 Random show long |
+| 6 | rotary 6 | 56 Random show |
+| 7 | rotary 7 | 57 Random show long |
 | 8 | jumper 1 | 1 On 1000s |
-| 9 | jumper 2 | 40 Random show |
+| 9 | jumper 2 | 56 Random show |
 
 An I2C start always takes over from a rotary/jumper mode; see 5.1 for what happens afterwards.
 Moving the rotary switch (a code stable for 20 ms) takes over from an I2C sequence, except that
@@ -398,11 +416,11 @@ Bytes are shown as they go on the wire after the address.
 
 ```
 write [0x80]                 ; pointer := WHO_AM_I
-read 10  -> 4D 50 01 00 00 0C 00 2A 3F 14
-            "MP" proto 1.0  fw 0.12.0  42 seqs  caps  addr
+read 10  -> 4D 50 01 00 00 0C 00 3A 3F 14
+            "MP" proto 1.0  fw 0.12.0  58 seqs  caps  addr
 ```
 
-Anything other than `4D 50` means firmware v010.5 or older: use legacy commands only.
+Anything other than `4D 50` means firmware v011 or older: use legacy commands only.
 
 **Enumerate the catalogue**
 

@@ -83,7 +83,7 @@ sensitive to the *order* of `random()` calls; see `docs/decisions.md` D-1/D-16.
   re-enabled; a second command mid-animation nests and the outer animation resumes afterwards.
 - **I2C register interface (dev sketch, D-22):** the protocol is specified in
   `docs/i2c-protocol.md`, and its constants are in `docs/magicpanel_i2c.h`. Byte 0 with bit 7
-  set addresses a register. A lone byte 0–39 is still a legacy command while `CONFIG.LEGACY` is
+  set addresses a register. A lone byte 0–55 is still a legacy command while `CONFIG.LEGACY` is
   set (EEPROM, default on). Multi-byte writes no longer deafen the receiver (the specimen's
   `Wire.read()` never drained the buffer). The register tests are
   `tests/test_i2c_protocol.py`: they read the header and the spec's catalogue table. If you
@@ -98,8 +98,13 @@ sensitive to the *order* of `random()` calls; see `docs/decisions.md` D-1/D-16.
   v010.5's patterns look as named (row 0 top, `VMagicPanel[row][7]` leftmost). On the bench the
   same panel looks rotated 180°. The dev sketch draws like v010.5 by default; the `ORIENTATION`
   register (0x32, saved in EEPROM) turns the picture 180° in `MapBoolGrid()`.
-- **Version:** the dev sketch is v012 (firmware 0.12.0); v011 is skipped because another Magic
-  Panel firmware uses it.
+- **Sequences 40-55 (D-26):** the v010.6/v011 sequences (TheJugg1er), ported from
+  `MagicPanel_v011.ino` (in the repo, reference only) under v011's numbers; the random shows are
+  56 and 57 and `SEQ_COUNT` is 58. `DrawHalf()` is `__attribute__((flatten))` on purpose: without
+  it `lc.setRow()` stops being inlined into `PrintGrid()` and every frame costs ~400 cycles more.
+  Catalogue flag `VARIES` (0x10) marks the two flicker sequences, whose length is only typical.
+- **Version:** the dev sketch is v012 (firmware 0.12.0), the successor to v010.5 and to
+  TheJugg1er's v010.6/v011; the number 0.11 is skipped because v011 exists already.
 
 ## Using the MCP server from Claude Code
 

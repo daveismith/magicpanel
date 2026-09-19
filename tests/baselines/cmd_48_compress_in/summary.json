@@ -1,0 +1,146 @@
+{
+  "build": {
+    "build_flags": {
+      "SOURCE_DATE_EPOCH": "0",
+      "date_time": "-Werror=date-time",
+      "prefix_map": "-fdebug-prefix-map=<repo>=."
+    },
+    "date_macro_hits": [],
+    "elf": {
+      "absolute_repo_path_in_elf": false,
+      "deterministic": true,
+      "elf_sha256": "d29c061282c13e43b85f9adbc612048fb7fc4195af3f1ef50b9deb803addda10",
+      "flash_bytes": 25042,
+      "flash_sha256": "a499ce04b9cf946d2ee448fcbc3067a7ad60ae836cf4362b705cc20d7caa1c73",
+      "hex_sha256": "32bd38b8f5a33382b0b5937cccf4012481ea080bfc0eb331ffe7628b5a4fdf3d",
+      "path": "build/firmware.elf",
+      "second_build": {
+        "elf_sha256": "d29c061282c13e43b85f9adbc612048fb7fc4195af3f1ef50b9deb803addda10",
+        "flash_sha256": "a499ce04b9cf946d2ee448fcbc3067a7ad60ae836cf4362b705cc20d7caa1c73"
+      }
+    },
+    "firmware_git": {
+      "dirty": true,
+      "sha": "f1b76689c534d179b40c359e3ee31440f7b29c62"
+    },
+    "sketch": {
+      "bytes": 67974,
+      "path": "MagicPanel.ino",
+      "sha256": "32dc1346ad2e5c94d10627869952961ae33eb33facb6ab7de6dc84aa3890c5e2"
+    },
+    "toolchain": {
+      "arduino_cli_commit": "01f3d4f2b",
+      "arduino_cli_version": "1.5.1",
+      "avr_gcc_package": "7.3.0-atmel3.6.1-arduino7",
+      "compiler": "avr-gcc (GCC) 7.3.0",
+      "core": "arduino:avr",
+      "core_version": "1.8.6",
+      "fqbn": "arduino:avr:diecimila:cpu=atmega328",
+      "host": {
+        "platform": "darwin",
+        "python": "3.14.4"
+      },
+      "libraries": {
+        "LedControl": {
+          "git_sha": "2714e8b1ca1a8fcc7f6b6d5e77025cb5eb702c3e",
+          "source": "third_party/LedControl (submodule)",
+          "version": "1.0.6"
+        },
+        "Wire": {
+          "source": "bundled with arduino:avr core",
+          "version": "1.8.6"
+        }
+      }
+    }
+  },
+  "canonical_hash": "02432fe453e94d18c7686646c4d7d1102048a36380722d37fa011db082a5e116",
+  "counts": {
+    "display_changes": 167,
+    "empty_latches": 1,
+    "events": 4,
+    "frames": 472,
+    "gpio_changes": 9,
+    "i2c_transactions": 1,
+    "latches": 236,
+    "malformed_bursts": 0,
+    "script_steps": 2
+  },
+  "diagnostics": [],
+  "eeprom": "default:0xff",
+  "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
+  "f_cpu": 16000000,
+  "final_display": {
+    "decode": [
+      0,
+      0
+    ],
+    "display_test": [
+      false,
+      false
+    ],
+    "grid": [
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000",
+      "00000000"
+    ],
+    "intensity": [
+      15,
+      15
+    ],
+    "orphan_bits": 0,
+    "rows_hex": [
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00",
+      "00"
+    ],
+    "scan_limit": [
+      7,
+      7
+    ],
+    "shutdown": [
+      false,
+      false
+    ]
+  },
+  "firmware": {
+    "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
+    "elf_sha256": "d29c061282c13e43b85f9adbc612048fb7fc4195af3f1ef50b9deb803addda10"
+  },
+  "harness_version": "0.3.0",
+  "markers": [
+    {
+      "cycle": 1600000,
+      "ns": 100000000.0,
+      "text": "cmd 48 compressIN(5,1)"
+    }
+  ],
+  "mcu": "atmega328p",
+  "scenario": {
+    "compare_mode": "settled",
+    "description": "I2C command 48: compressIN(5,1)",
+    "name": "cmd_48_compress_in",
+    "run_ms": 5600,
+    "settle_ms": 10.0,
+    "sha256": "1db5cd767a5195347fae049f48e63c7264a4097b9d154e05b205520c34e7b6a1",
+    "timing_tolerance_cycles": 8000,
+    "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
+  },
+  "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-cmd_48_compress_in/stimulus.script",
+  "settled_hash": "ad680c25518226670a9cf44d6b009d4cf5e4fa368ac6339f308e6bf92926df83",
+  "settled_states": 42,
+  "settled_timing_hash": "5f17482411837f1ff0909747762d3aae2dae17666be957653aedfc1c7ca8dbd7",
+  "status": "ok",
+  "timing_hash": "c87a2a81c858bb0c38d9546f32ba5b98c55bb06f4235eb956adcf0875da6f393",
+  "total_cycles": 89600001,
+  "total_ns": 5600000062.5
+}

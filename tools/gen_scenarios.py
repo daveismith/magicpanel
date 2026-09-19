@@ -9,6 +9,12 @@ from mplib import I2C_COMMANDS, JUMPER_MODES, SCENARIO_DIR, SLAVE_ADDR
 
 SEND_MS = 100
 
+# Scenario slugs for the v010.6/v011 sequences (catalogue 40-55)
+V011_SLUGS = {40: "countdown_9", 41: "countdown_3", 42: "flicker", 43: "flicker_long",
+              44: "smile", 45: "sad_face", 46: "heart", 47: "checkerboard",
+              48: "compress_in", 49: "compress_in_wipe", 50: "explode_out", 51: "explode_out_wipe",
+              52: "vumeter_bottom", 53: "vumeter_left", 54: "vumeter_top", 55: "vumeter_right"}
+
 # Protocol v1 register access (docs/magicpanel_i2c.h): byte 0 = R | register
 R, START, STOP, BRIGHTNESS, CONFIG = 0x80, 0x20, 0x21, 0x22, 0x30
 
@@ -52,6 +58,7 @@ def main() -> None:
         elif cmd in (35, 36, 37, 38): slug = f"quadrant_type{cmd-34}"
         elif cmd == 7: slug = "alert_20"
         elif cmd == 24: slug = "fadeoutin"
+        elif cmd in V011_SLUGS: slug = V011_SLUGS[cmd]
         run_ms = 1500 if cmd == 1 else budget(nominal)
         desc = f"I2C command {cmd}: {name}" + (" (observe ON state only; the handler blocks for 1000 s)" if cmd == 1 else "")
         out[f"cmd_{cmd:02d}_{slug}"] = y(f"cmd_{cmd:02d}_{slug}", desc, run_ms, [i2c(SEND_MS, cmd)])
@@ -152,8 +159,8 @@ def main() -> None:
         [i2c(100, R | BRIGHTNESS, 4), i2c(200, R | START, 3), i2c(1000, R | BRIGHTNESS, 15),
          i2c(1500, R | BRIGHTNESS, 16)])
     out["reg_random_show"] = y("reg_random_show",
-        "Register START of the random show (catalogue 40, rotary modes 6/9 over I2C): one pattern "
-        "and the start of the off interval", 26000, [i2c(100, R | START, 40)])
+        "Register START of the random show (catalogue 56, rotary modes 6/9 over I2C): one pattern "
+        "and the start of the off interval", 26000, [i2c(100, R | START, 56)])
     out["reg_legacy_off"] = y("reg_legacy_off",
         "CONFIG legacy bit cleared: the one-byte command 20 is ignored (LEGACY_OFF), the register "
         "START of Cross still works", 4500,

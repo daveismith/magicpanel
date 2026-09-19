@@ -3,8 +3,10 @@
 //// Release History
 // v012.0 - I2C register interface (docs/i2c-protocol.md): start/stop/status/catalogue/brightness,
 //          legacy one-byte commands kept; every animation runs from loop(); ORIENTATION setting
-//          turns the picture 180 degrees for panels installed the other way up.
-//          (v011 is skipped: that number is used by another Magic Panel firmware.)
+//          turns the picture 180 degrees for panels installed the other way up. Includes the
+//          sequences 40-55 of v010.6/v011 (TheJugg1er), not their serial/JawaLite interface.
+// v011 - Cleanup of code, additional documentation added (TheJugg1er 02-18-2020)
+// v010.6 - Added Serial interface support and additional sequences (TheJugg1er 01-05-2020)
 // v010.5 - Re-added Working I2C and additional display sequences  (FlthyMcNsty 05-21-2014)
 // v010 - Remove I2C code and clean up
 // v009 - Combine Big Happy Dude functions to v008 + allow for 3 pin binary input
@@ -223,7 +225,8 @@ enum {
   P_NONE, P_EYESCAN, P_CYLONCOL, P_CYLONROW, P_FLASHV, P_FLASHQ, P_FLASHALL, P_ONELOOP, P_TWOLOOP,
   P_FADEOUTIN, P_THETEST, P_ONETEST, P_SYMBOL, P_CROSS, P_ALLONTIMED, P_TRACEDOWN, P_TRACEUP,
   P_TRACELEFT, P_TRACERIGHT, P_RANDOMPIXEL, P_QUADRANT, P_TOGGLE, P_ALERT, P_EXPAND, P_COMPRESS,
-  P_MYSYMBOL
+  P_MYSYMBOL, P_COUNTDOWN, P_PICTURE, P_RANDOMALERT, P_CHECKERBOARD, P_COMPRESSIN, P_EXPLODEOUT,
+  P_VUMETER
 };
 
 // How a caller wraps a pattern: allOFF() before, allOFF() after, and whether it sets
@@ -234,8 +237,20 @@ enum {
 #define SQ_WRAP (SQ_PRE | SQ_POST | SQ_RT)
 struct SeqEntry { byte flags; byte pat; int a; int b; };
 
-// I2C command byte -> sequence (transcribed from the original receiveEvent switch).
-const SeqEntry I2C_TABLE[40] PROGMEM = {
+// Catalogue IDs: 0-55 are the one-byte commands (0-39 v010.5, 40-55 v011), then the random shows.
+#define SEQ_RANDOM_SHOW  56       // Random() with the short off interval (GPIO modes 6 and 9)
+#define SEQ_RANDOM_LONG  57       // Random() with the long off interval (GPIO mode 7)
+#define SEQ_COUNT        58
+#define SEQ_NONE         0xFF
+#define SUB_SEQ_OFF      0xFE
+
+// Pictures drawn by P_PICTURE (8 rows each, row 0 at the top): the digits 0-9 of v011's
+// countdowns, then its faces.
+enum { PIC_SMILE = 10, PIC_SAD, PIC_HEART };
+
+// I2C command byte -> sequence (transcribed from the original receiveEvent switch; 40-55 from
+// v011's runPattern(), whose turnOff() is allOFF() as alwaysOn is false by default).
+const SeqEntry I2C_TABLE[SEQ_RANDOM_SHOW] PROGMEM = {
   { SQ_PRE,           P_NONE,        0,     0 },  //  0 panel off
   { SQ_RT,            P_ALLONTIMED,  0,     0 },  //  1 on "indefinitely" (1000 s)
   { SQ_RT,            P_ALLONTIMED,  2000,  0 },  //  2 on 2 s, then falls through into 3 (no break in the original)
@@ -276,6 +291,22 @@ const SeqEntry I2C_TABLE[40] PROGMEM = {
   { SQ_WRAP,          P_QUADRANT,    5,     3 },  // 37
   { SQ_WRAP,          P_QUADRANT,    5,     4 },  // 38
   { SQ_WRAP,          P_RANDOMPIXEL, 40,    0 },  // 39
+  { SQ_POST | SQ_RT,  P_COUNTDOWN,   9,     0 },  // 40 v011
+  { SQ_POST | SQ_RT,  P_COUNTDOWN,   3,     0 },  // 41
+  { SQ_WRAP,          P_RANDOMALERT, 20,    0 },  // 42
+  { SQ_WRAP,          P_RANDOMALERT, 40,    0 },  // 43
+  { SQ_WRAP,          P_PICTURE,     PIC_SMILE, 0 },  // 44 (v011: allOFF() only on a new code)
+  { SQ_WRAP,          P_PICTURE,     PIC_SAD,   0 },  // 45
+  { SQ_WRAP,          P_PICTURE,     PIC_HEART, 0 },  // 46
+  { SQ_WRAP,          P_CHECKERBOARD, 8,    200 },// 47
+  { SQ_WRAP,          P_COMPRESSIN,  5,     1 },  // 48
+  { SQ_WRAP,          P_COMPRESSIN,  5,     2 },  // 49
+  { SQ_WRAP,          P_EXPLODEOUT,  5,     1 },  // 50
+  { SQ_WRAP,          P_EXPLODEOUT,  5,     2 },  // 51
+  { SQ_WRAP,          P_VUMETER,     15,    1 },  // 52
+  { SQ_WRAP,          P_VUMETER,     15,    2 },  // 53
+  { SQ_WRAP,          P_VUMETER,     15,    3 },  // 54
+  { SQ_WRAP,          P_VUMETER,     15,    4 },  // 55
 };
 
 // Random() mode -> sequence (transcribed from the original Random() nested switch; random(0,35)
@@ -334,18 +365,13 @@ const SeqEntry GPIO_TABLE[10] PROGMEM = {
   { 0,                P_NONE,        0,     0 },  // 9 Random(random(8000,14000))
 };
 
-#define SEQ_COUNT        42
-#define SEQ_RANDOM_SHOW  40       // Random() with the short off interval (GPIO modes 6 and 9)
-#define SEQ_RANDOM_LONG  41       // Random() with the long off interval (GPIO mode 7)
-#define SEQ_NONE         0xFF
-#define SUB_SEQ_OFF      0xFE
-
 // Catalogue: what an I2C controller reads through INFO_INDEX. Layout = INFO_FLAGS, INFO_LENGTH_MS
 // (little-endian, as AVR stores it), INFO_NAME; 21 bytes, no padding on AVR.
 #define INFO_LOOPS    0x01
 #define INFO_RANDOM   0x02
 #define INFO_ENDS_LIT 0x04
 #define INFO_HOLD     0x08
+#define INFO_VARIES   0x10   // the length differs from run to run (random delays)
 #define LEN_INDEFINITE 0xFFFFFFFFUL
 struct SeqInfo { byte flags; unsigned long lengthMs; char name[16]; };
 const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
@@ -388,7 +414,23 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { 0,                          4247,    "Quadrant 2" },
   { 0,                          4323,    "Quadrant 3" },
   { 0,                          4323,    "Quadrant 4" },
-  { INFO_RANDOM,                6636,    "Random pixel" },
+  { INFO_RANDOM,                6638,    "Random pixel" },
+  { 0,                          10085,   "Countdown 9" },
+  { 0,                          4039,    "Countdown 3" },
+  { INFO_RANDOM | INFO_VARIES,  2092,    "Flicker" },
+  { INFO_RANDOM | INFO_VARIES,  4228,    "Flicker long" },
+  { INFO_HOLD,                  1023,    "Smile" },
+  { INFO_HOLD,                  1023,    "Sad face" },
+  { INFO_HOLD,                  1023,    "Heart" },
+  { 0,                          3341,    "Checkerboard" },
+  { 0,                          4076,    "Compress in" },
+  { 0,                          8099,    "Compress in wipe" },
+  { 0,                          4576,    "Explode out" },
+  { 0,                          9099,    "Explode out wipe" },
+  { INFO_RANDOM,                4710,    "VU meter bottom" },
+  { INFO_RANDOM,                4710,    "VU meter left" },
+  { INFO_RANDOM,                4709,    "VU meter top" },
+  { INFO_RANDOM,                4710,    "VU meter right" },
   { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show" },
   { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show long" },
 };
@@ -1412,6 +1454,13 @@ bool runPattern() {
     case P_EXPAND:      return Expand(patA, patB);
     case P_COMPRESS:    return Compress(patA, patB);
     case P_MYSYMBOL:    return MySymbol();
+    case P_COUNTDOWN:   return Countdown(patA);
+    case P_PICTURE:     return Picture(patA);
+    case P_RANDOMALERT: return RandomAlert(patA);
+    case P_CHECKERBOARD: return CheckerBoard(patA, patB);
+    case P_COMPRESSIN:  return compressIN(patA, patB);
+    case P_EXPLODEOUT:  return explodeOUT(patA, patB);
+    case P_VUMETER:     return VUMeter(patA, patB);
     default:            return false;
   }
 }
@@ -1419,6 +1468,178 @@ bool runPattern() {
 //////
 //////////////////////////////// end FlthyMcNsty //////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////////////////////////
+// TheJugg1er sequences from v010.6/v011 (coroutines; each PAT_DELAY was a delay() in v011)
+////////////////////////////////////////////////////////////////////////////////////////
+
+const byte PICTURES[13][8] PROGMEM = {
+  { B00111000, B01000100, B01000100, B01000100, B01000100, B01000100, B01000100, B00111000 },  // 0
+  { B00010000, B00110000, B00010000, B00010000, B00010000, B00010000, B00010000, B00111000 },  // 1
+  { B00111000, B01000100, B00000100, B00000100, B00001000, B00010000, B00100000, B01111100 },  // 2
+  { B00111000, B01000100, B00000100, B00011000, B00000100, B00000100, B01000100, B00111000 },  // 3
+  { B00000100, B00001100, B00010100, B00100100, B01000100, B01111100, B00000100, B00000100 },  // 4
+  { B01111100, B01000000, B01000000, B01111000, B00000100, B00000100, B01000100, B00111000 },  // 5
+  { B00111000, B01000100, B01000000, B01111000, B01000100, B01000100, B01000100, B00111000 },  // 6
+  { B01111100, B00000100, B00000100, B00001000, B00010000, B00100000, B00100000, B00100000 },  // 7
+  { B00111000, B01000100, B01000100, B00111000, B01000100, B01000100, B01000100, B00111000 },  // 8
+  { B00111000, B01000100, B01000100, B01000100, B00111100, B00000100, B01000100, B00111000 },  // 9
+  { B00111100, B01000010, B10100101, B10000001, B10100101, B10011001, B01000010, B00111100 },  // smile
+  { B00111100, B01000010, B10100101, B10000001, B10011001, B10100101, B01000010, B00111100 },  // sad
+  { B00000000, B01100110, B11111111, B11111111, B01111110, B00111100, B00011000, B00000000 },  // heart
+};
+
+void ShowPicture(byte pic) {
+  for (int row = 0; row < 8; row++) SetRow(row, pgm_read_byte(&PICTURES[pic][row]));
+  Frame();
+}
+
+// Countdown() (from 9) and ShortCountdown() (from 3): one digit a second, down to 0.
+bool Countdown(int from) {
+  CO_BEGIN(patPC);
+  for (sq.r = from; sq.r >= 0; sq.r--) {
+    ShowPicture(sq.r);
+    PAT_DELAY(1000);
+  }
+  CO_END(patPC);
+}
+
+// Smile(), Sad(), Heart(): the picture for 1 s.
+bool Picture(int pic) {
+  CO_BEGIN(patPC);
+  ShowPicture(pic);
+  PAT_DELAY(1000);
+  CO_END(patPC);
+}
+
+bool CheckerBoard(int Repeats, int FlashDelay) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < Repeats; sq.i++) {
+    for (int j = 0; j < 2; j++) {
+      SetRow(j, B11001100);
+      SetRow(j+2, B00110011);
+      SetRow(j+4, B11001100);
+      SetRow(j+6, B00110011);
+    }
+    Frame();
+    PAT_DELAY(FlashDelay);
+    for (int j = 0; j < 2; j++) {
+      SetRow(j, B00110011);
+      SetRow(j+2, B11001100);
+      SetRow(j+4, B00110011);
+      SetRow(j+6, B11001100);
+    }
+    Frame();
+    PAT_DELAY(FlashDelay);
+  }
+  CO_END(patPC);
+}
+
+// Alert() with random on/off times, closer to the MarcDuino's flicker.
+bool RandomAlert(int timer) {
+  CO_BEGIN(patPC);
+  while (sq.r < timer) {
+    for (int row = 0; row < 8; row++)   // no braces in v011 either: allON() really runs 8 times
+      allON();
+    PAT_DELAY(random(5, 40));
+    allOFF();
+    PAT_DELAY(random(3, 25));
+    sq.r++;
+  }
+  CO_END(patPC);
+}
+
+// v011's compressIN/explodeOUT write single MAX7221 digits with lc.setRow(dev, digit, 0xFF/0x00):
+// one digit is half a picture row (register row dev*8 + digit, see MapBoolGrid). DrawHalf does
+// the same through the picture, so ORIENTATION applies, and still clocks out only that digit, so
+// the timing stays v011's. Digits outside 0-7 are ignored, as LedControl::setRow ignores them.
+// flatten: keep lc.setRow() inlined here, so the compiler does not emit one shared out-of-line
+// copy for this call and PrintGrid()'s 16, which would cost ~400 cycles on every frame drawn.
+__attribute__((flatten)) void DrawHalf(byte dev, int digit, bool on) {
+  if (digit < 0 || digit > 7) return;
+  byte reg = dev * 8 + digit;
+  for (int col = 0; col < 4; col++)
+    VMagicPanel[reg >> 1][(reg & 1) ? col : col + 4] = on;
+  if (orientation == ORIENT_ROT180) reg = 15 - reg;
+  MagicPanel[reg] = on ? ((reg & 1) ? 0x0F : 0xF0) : 0;   // what MapBoolGrid() would give
+  lc.setRow(reg >> 3, reg & 7, MagicPanel[reg]);
+}
+
+// Fills the top half from its top-left and the bottom half from its bottom-right, half a row per
+// 100 ms; type 2 then clears in the same order.
+bool compressIN(int loops, int type) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < loops; sq.i++) {
+    for (sq.r = 0; sq.r < 8; sq.r++) {
+      DrawHalf(0, sq.r, true);
+      DrawHalf(1, 7 - sq.r, true);
+      PAT_DELAY(100);
+    }
+    if (type == 2) {
+      for (sq.r = 0; sq.r < 8; sq.r++) {
+        DrawHalf(0, sq.r, false);
+        DrawHalf(1, 7 - sq.r, false);
+        PAT_DELAY(100);
+      }
+    }
+    allOFF();
+  }
+  CO_END(patPC);
+}
+
+// The reverse, from the centre out. v011 counts 9 steps (digits 8..0 against 0..8), so the first
+// step lights only one half row and the last only one: kept as v011 draws it (D-26).
+bool explodeOUT(int loops, int type) {
+  CO_BEGIN(patPC);
+  for (sq.i = 0; sq.i < loops; sq.i++) {
+    for (sq.r = 8; sq.r >= 0; sq.r--) {
+      DrawHalf(1, 8 - sq.r, true);
+      DrawHalf(0, sq.r, true);
+      PAT_DELAY(100);
+    }
+    if (type == 2) {
+      for (sq.r = 8; sq.r >= 0; sq.r--) {
+        DrawHalf(1, 8 - sq.r, false);
+        DrawHalf(0, sq.r, false);
+        PAT_DELAY(100);
+      }
+    }
+    allOFF();
+  }
+  CO_END(patPC);
+}
+
+// Used in the VU Meter to display "levels"
+const byte bargraph[17] PROGMEM = {
+  B00000000, B10000000, B11000000, B11100000, B11110000, B11111000, B11111100, B11111110,
+  B11111111, B01111111, B00111111, B00011111, B00001111, B00000111, B00000011, B00000001,
+  B00000000
+};
+byte vuLevel[8];                  // VUMeter's bar levels (a local array in v011; lives across yields)
+
+// Simulated VU meter: every 250 ms each bar moves up or down by 1 or 2. Type 1 columns from the
+// bottom, 2 rows from the left, 3 columns from the top, 4 rows from the right.
+bool VUMeter(int loops, int type) {
+  CO_BEGIN(patPC);
+  for (int i = 0; i < 8; i++) vuLevel[i] = random(0, 9);
+  for (sq.i = 0; sq.i < loops; sq.i++) {
+    for (int j = 0; j < 8; j++) {       // v011 clocks out a frame after every bar
+      byte off = (type >= 3) ? 8 : 0;
+      byte bar = pgm_read_byte(&bargraph[vuLevel[j] + off]);
+      if (type == 1 || type == 3) SetCol(7 - j, bar);
+      else SetRow(7 - j, bar);
+      Frame();
+    }
+    PAT_DELAY(250);
+    for (int y = 0; y < 8; y++) {
+      byte upDown = random(0, 2);
+      byte changeSize = random(1, 3);
+      if (upDown == 1) vuLevel[y] = (vuLevel[y] + changeSize <= 8) ? vuLevel[y] + changeSize : 8;
+      else vuLevel[y] = (vuLevel[y] >= changeSize) ? vuLevel[y] - changeSize : 0;
+    }
+  }
+  CO_END(patPC);
+}
 
 void blankPANEL() {
   lc.clearDisplay(0);
@@ -1555,7 +1776,7 @@ void receiveEvent(int count) {
   if (!(buf[0] & REG_BIT)) {
     if (len > 1) i2cError(ERR_BAD_LENGTH);
     else if (!(cfgConfig & CFG_LEGACY)) i2cError(ERR_LEGACY_OFF);
-    else if (buf[0] < 40) {
+    else if (buf[0] < SEQ_RANDOM_SHOW) {
       pendAction = ACT_START;
       pendSeq = buf[0];
       pendRepeat = 1;

@@ -1,6 +1,8 @@
 # Upgrading from v010.5
 
-This firmware replaces IA-PARTS Magic Panel FX v010.5 and is built to be a drop-in upgrade.
+This firmware replaces IA-PARTS Magic Panel FX v010.5 and is built to be a drop-in upgrade. It
+also includes the sequences of TheJugg1er's v010.6/v011, under the same numbers (`40`–`55`),
+though not that firmware's serial or `T`-command interface.
 
 ## What stays the same
 
@@ -19,6 +21,7 @@ This firmware replaces IA-PARTS Magic Panel FX v010.5 and is built to be a drop-
 | The rotary switch was read between sequences only | A new position (steady for 20 ms) takes effect at once |
 | Write-only: no way to read anything back | Status, the sequence list, errors and version can be read ([registers](reference/i2c-protocol.md)) |
 | — | Start with repeat or loop, stop, brightness, and saved settings |
+| — | 16 more patterns from v010.6/v011: countdowns, faces, checkerboard, flicker, compress in, explode out and VU meters (bytes `40`–`55`) |
 
 ## After flashing
 

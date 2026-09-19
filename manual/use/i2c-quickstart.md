@@ -2,8 +2,9 @@
 
 The panel is an I2C device at address **`0x14`**. There are two ways to talk to it.
 
-- **One command byte (legacy).** Send a single byte `0`–`39` and the panel plays that sequence.
-  This is what existing droid controllers do, and it keeps working.
+- **One command byte (legacy).** Send a single byte `0`–`55` and the panel plays that sequence.
+  This is what existing droid controllers do, and it keeps working. Bytes `0`–`39` are the
+  patterns of v010.5, `40`–`55` those added in v010.6/v011.
 - **Registers.** Every other feature: start with repeat or loop, stop, status, the sequence list,
   brightness and settings. The first byte of every register access has bit 7 set, so register
   `0x20` is sent as `0xA0`.
@@ -16,11 +17,11 @@ and C++ are in [`magicpanel_i2c.h`](../reference/magicpanel_i2c.h).
 Write the register pointer `0x80` (identity), then read 10 bytes:
 
 ```
-write [0x80]   read 10  ->  4D 50 01 00 00 0C 00 2A 3F 14
-                            "MP" protocol 1.0, firmware 0.12.0, 42 sequences
+write [0x80]   read 10  ->  4D 50 01 00 00 0C 00 3A 3F 14
+                            "MP" protocol 1.0, firmware 0.12.0, 58 sequences
 ```
 
-If you read `00 00 …`, the panel runs firmware v010.5 or older: only one-byte commands work.
+If you read `00 00 …`, the panel runs firmware v011 or older: only its own commands work.
 
 ## Existing droid controllers
 

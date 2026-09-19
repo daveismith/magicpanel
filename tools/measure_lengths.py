@@ -19,7 +19,7 @@ SPEC = mplib.REPO / "docs" / "i2c-protocol.md"
 REG_START, REG_STATUS, REG_BIT = 0x20, 0x10, 0x80
 ST_COMPLETE = 2
 INDEFINITE = 0xFFFFFFFF
-LOOPING = (40, 41)
+LOOPING = tuple(mplib.header_constants()[k] for k in ("MP_SEQ_RANDOM_SHOW", "MP_SEQ_RANDOM_SHOW_LONG"))
 POLL_MS = 50
 
 

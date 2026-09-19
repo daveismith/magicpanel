@@ -9,7 +9,7 @@
  *   register write : [MP_REG(reg), d0, d1, ...]          (at most 8 data bytes)
  *   set pointer    : [MP_REG(reg)]                        (then read; STOP or repeated START)
  *   register read  : N bytes from the pointer, auto-increment (at most 32 per transaction)
- *   legacy command : [seq]   one byte, 0..39, only while MP_CFG_LEGACY is set
+ *   legacy command : [seq]   one byte, 0..55, only while MP_CFG_LEGACY is set
  * Multi-byte values are little-endian.
  */
 #ifndef MAGICPANEL_I2C_H
@@ -123,9 +123,11 @@
 #define MP_INFO_RANDOM         0x02    /* content depends on the PRNG */
 #define MP_INFO_ENDS_LIT       0x04    /* panel is left on at the end */
 #define MP_INFO_HOLD           0x08    /* a static image held for the whole length */
+#define MP_INFO_VARIES         0x10    /* the length differs from run to run: treat it as typical */
 #define MP_LENGTH_INDEFINITE   0xFFFFFFFFUL
 
-#define MP_SEQ_RANDOM_SHOW       40
-#define MP_SEQ_RANDOM_SHOW_LONG  41
+#define MP_LEGACY_LAST           55      /* highest one-byte legacy command */
+#define MP_SEQ_RANDOM_SHOW       56
+#define MP_SEQ_RANDOM_SHOW_LONG  57
 
 #endif /* MAGICPANEL_I2C_H */

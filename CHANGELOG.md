@@ -8,8 +8,8 @@ All notable changes to the Magic Panel firmware. The format follows
 
 ## [0.12.0]
 
-First release of this firmware, a compatible successor to IA-PARTS Magic Panel FX v010.5. The
-version number 0.11 (v011) is skipped: it is used by another Magic Panel firmware.
+First release of this firmware, a compatible successor to IA-PARTS Magic Panel FX v010.5 and to
+TheJugg1er's v010.6/v011. The version number 0.11 is skipped because v011 exists already.
 
 ### Added
 
@@ -19,7 +19,11 @@ version number 0.11 (v011) is skipped: it is used by another Magic Panel firmwar
   flags and measured lengths; brightness.
 - Settings kept in EEPROM: legacy one-byte commands on/off, rotary/jumper inputs on/off, resume
   of the rotary/jumper show after an I2C sequence, a default brightness and the orientation.
-- The random shows can be started over I2C (sequences 40 and 41).
+- The 16 sequences of v010.6/v011 (TheJugg1er): countdowns from 9 and from 3, flicker and
+  flicker long, smile, sad face, heart, checkerboard, compress in, explode out (each also in a
+  version that clears again) and four VU meters. They keep v011's numbers 40–55 and can be
+  started with a single byte, like the older commands.
+- The random shows can be started over I2C; they are now sequences 56 and 57.
 - `ORIENTATION` setting (register 0x32, saved in EEPROM) turns the picture 180° for panels
   installed the other way up. By default patterns are drawn exactly as in v010.5.
 

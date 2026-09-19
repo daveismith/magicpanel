@@ -275,3 +275,27 @@ becomes an option:
   its rebaseline evidence is removed with them (it is in git history, commit b3daf72). The
   default path clocks the MAX7221s exactly as before, so they pass within D-20's tolerance.
 
+**D-26 — The v010.6/v011 sequences, under v011's numbers (2026-09-19, owner decision).** The owner
+asked for the 16 sequences TheJugg1er added in v010.6/v011 (countdowns, faces, checkerboard,
+flicker, compress in, explode out, VU meters), not that firmware's serial/JawaLite interface.
+- *Numbering.* They keep v011's IDs 40-55, so a number means the same pattern on both firmwares;
+  the random shows move from 40/41 to 56/57 (`SEQ_COUNT` 58) and one-byte legacy commands now
+  cover 0-55. Nothing is released yet, so no controller depends on the old 40/41.
+- *Faithfulness.* Ported as v011 draws them, quirks included: `RandomAlert()` calls `allON()`
+  eight times per flash, `VUMeter()` clocks out a frame per bar, and `explodeOUT()` counts nine
+  half-row steps against eight digits, so its first and last steps light only one half row
+  (LedControl ignores the out-of-range digit). Verified in simulation against v011 itself: 16
+  scratch builds of `MagicPanel_v011.ino` that run one sequence from `setup()` produce the same
+  frames, within 1.3 ms over runs of up to 9 s.
+- *Single-digit writes.* v011's `compressIN`/`explodeOUT` write one MAX7221 digit at a time with
+  `lc.setRow(dev, digit, 0xFF)`, bypassing the picture buffer and so `ORIENTATION`. `DrawHalf()`
+  writes the same single digit, but through the buffer and the orientation mapping (register row
+  r becomes 15-r), which keeps both v011's timing and the setting.
+- *Timing trap.* `DrawHalf()` gives `lc.setRow()` a second call site, so the compiler stopped
+  inlining it into `PrintGrid()`: 16 extra calls made every frame ~400 cycles slower and 48
+  scenarios drifted past D-20's tolerance. `DrawHalf()` is `__attribute__((flatten))`, which
+  restores `PrintGrid()`'s code byte for byte.
+- *Lengths that vary.* The two flicker sequences wait for random times, so `INFO_LENGTH_MS`
+  cannot be exact. Catalogue flag bit 4 `VARIES` says so, and the length test allows ±10% for
+  them.
+

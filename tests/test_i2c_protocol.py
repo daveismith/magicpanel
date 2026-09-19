@@ -11,19 +11,12 @@ from pathlib import Path
 import pytest
 from conftest import REPO, mplib
 
-HEADER = REPO / "docs" / "magicpanel_i2c.h"
 SPEC = REPO / "docs" / "i2c-protocol.md"
 
 
-def _header_constants() -> dict[str, int]:
-    consts = {}
-    for m in re.finditer(r"^#define\s+(MP_\w+)\s+(0x[0-9A-Fa-f]+|\d+)U?L?\b", HEADER.read_text(), re.M):
-        consts[m.group(1)] = int(m.group(2), 0)
-    return consts
-
-
-C = _header_constants()
+C = mplib.header_constants()
 FLAG_BITS = {"LOOPS": C["MP_INFO_LOOPS"], "RANDOM": C["MP_INFO_RANDOM"], "ENDS_LIT": C["MP_INFO_ENDS_LIT"],
+             "VARIES": C["MP_INFO_VARIES"],
              "HOLD": C["MP_INFO_HOLD"]}
 
 
@@ -273,14 +266,16 @@ def test_catalogue_matches_spec(panel):
 def test_catalogue_length_is_what_the_sequence_takes(panel, sid):
     """INFO_LENGTH_MS equals the ELAPSED_MS the firmware reports at completion, within a poll
     interval (tools/measure_lengths.py regenerates the values). Command 1 (1000 s) is derived."""
-    length = {r[0]: r[3] for r in _spec_catalogue()}[sid]
+    sid_row = {r[0]: r for r in _spec_catalogue()}[sid]
+    length, varies = sid_row[3], sid_row[2] & C["MP_INFO_VARIES"]
+    tol = length // 10 if varies else 10           # VARIES: random waits, so the length is typical
     panel.cmd(f"i2c_write 0x14 {C['MP_REG_BIT'] | C['MP_START']} {sid}")
-    if length > 100:
-        panel.step(length - 100)
+    if length - tol > 100:
+        panel.step(length - tol - 100)
         assert panel.status()["state"] == C["MP_STATE_RUNNING"]
-    panel.step(200)
+    panel.step(tol + 200)
     s = panel.status()
-    assert s["state"] == C["MP_STATE_COMPLETE"] and abs(s["elapsed"] - length) <= 10, s
+    assert s["state"] == C["MP_STATE_COMPLETE"] and abs(s["elapsed"] - length) <= tol, s
 
 
 def test_catalogue_index_out_of_range(panel):
@@ -308,6 +303,21 @@ def test_orientation(panel, orient, row, pixel):
     assert sum(r.count("#") for r in grid) == 1
 
 
+@pytest.mark.parametrize("orient,row,half", [
+    ("MP_ORIENT_NORMAL", 4, "11110000"),
+    ("MP_ORIENT_ROTATE_180", 3, "00001111"),
+])
+def test_orientation_single_digit_draw(panel, orient, row, half):
+    """Explode out (50) clocks out single MAX7221 digits as v011 did (DrawHalf); ORIENTATION
+    still applies. Its first step lights only the left half of row 4."""
+    panel.write(C["MP_REG_BIT"] | C["MP_ORIENTATION"], C[orient])
+    panel.start(50)
+    panel.step(15)                                              # allOFF frame, then the first step
+    grid = panel.display()["ascii"]
+    assert grid[row] == half.replace("1", "#").replace("0", ".")
+    assert sum(r.count("#") for r in grid) == 4
+
+
 # ---------------------------------------------------------------------------------- brightness
 def test_brightness(panel):
     assert panel.display()["intensity"] == [15, 15]
@@ -327,7 +337,7 @@ def test_brightness(panel):
     ([0x80 | 0x46, 65], "MP_ERR_READ_ONLY"),
     ([0x80 | 0x22, 3, 4], "MP_ERR_UNKNOWN_REG"),                  # runs into unmapped 0x23: rejected whole
     ([0x80 | 0x20, 20, 1, 0, 0], "MP_ERR_BAD_LENGTH"),
-    ([0x80 | 0x20, 42], "MP_ERR_BAD_VALUE"),
+    ([0x80 | 0x20, 58], "MP_ERR_BAD_VALUE"),
     ([0x80 | 0x20, 20, 1, 2], "MP_ERR_BAD_VALUE"),
     ([0x80 | 0x21, 2], "MP_ERR_BAD_VALUE"),
     ([0x80 | 0x21, 0, 0], "MP_ERR_BAD_LENGTH"),
@@ -351,8 +361,17 @@ def test_multibyte_legacy_write_no_longer_deafens(panel):
     assert (s["seq"], s["source"], s["state"]) == (26, C["MP_SOURCE_LEGACY"], C["MP_STATE_RUNNING"])
 
 
+@pytest.mark.parametrize("seq", [40, 55])
+def test_legacy_reaches_v011_sequences(panel, seq):
+    """One-byte commands 40-55 start v011's sequences under v011's numbers."""
+    assert seq <= C["MP_LEGACY_LAST"]
+    panel.write(seq)
+    s = panel.status()
+    assert (s["seq"], s["source"], s["state"]) == (seq, C["MP_SOURCE_LEGACY"], C["MP_STATE_RUNNING"])
+
+
 def test_legacy_unknown_command_is_not_an_error(panel):
-    panel.write(40)
+    panel.write(C["MP_LEGACY_LAST"] + 1)
     s = panel.status()
     assert (s["errors"], s["state"]) == (0, C["MP_STATE_IDLE"])
 
