@@ -6,7 +6,7 @@ SCENARIO ?=
 RUN_ARGS ?=
 PYTEST_ARGS ?= -v
 
-.PHONY: docs-setup docs-gen docs-build docs-serve docs-preview-versions setup venv firmware reference check-specimen harness scenarios baseline rebaseline compare test test-fast determinism mutants spikes gif gifs clean help
+.PHONY: docs-setup docs-gen docs-build docs-offline docs-serve docs-preview-versions setup venv firmware reference check-specimen harness scenarios baseline rebaseline compare test test-fast determinism mutants spikes gif gifs clean help
 
 help:             ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-14s %s\n", $$1, $$2}'
@@ -90,6 +90,12 @@ manual/generated/version.md:
 docs-build: manual/generated/version.md ## build the site strictly -> build/site/ (run docs-gen first to refresh)
 	@cp docs/magicpanel_i2c.h manual/reference/magicpanel_i2c.h
 	.venv/bin/zensical build --strict --clean
+
+docs-offline: manual/generated/version.md ## build a copy that works from disk -> build/site-offline/ (release zip)
+	@cp docs/magicpanel_i2c.h manual/reference/magicpanel_i2c.h
+	@sed -e 's|^site_dir: .*|site_dir: build/site-offline|' -e 's|^strict: .*|strict: true\nuse_directory_urls: false|' \
+	    mkdocs.yml > .mkdocs-offline.yml
+	.venv/bin/zensical build --strict --clean -f .mkdocs-offline.yml; rc=$$?; rm -f .mkdocs-offline.yml; exit $$rc
 
 docs-serve: manual/generated/version.md ## serve the site locally with live reload
 	.venv/bin/zensical serve

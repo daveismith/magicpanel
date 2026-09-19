@@ -28,3 +28,15 @@ def test_rejected_tags(tmp_path, tag):
 
 def test_dev_sketch_has_a_version():
     assert check_version.firmware_version() == (0, 11, 0)
+
+
+def test_changelog_section(tmp_path):
+    log = tmp_path / "CHANGELOG.md"
+    log.write_text("# Changelog\n\n## [Unreleased]\n\n## [0.11.0]\n\n### Added\n\n- thing\n\n## [0.10.0]\n\n- old\n")
+    assert check_version.changelog_section("0.11.0", log) == "### Added\n\n- thing\n"
+    with pytest.raises(SystemExit):
+        check_version.changelog_section("0.12.0", log)
+
+
+def test_repo_changelog_has_the_current_version():
+    assert "register interface" in check_version.changelog_section("0.11.0")

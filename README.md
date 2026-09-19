@@ -7,6 +7,9 @@
 - **[harness/README.md](harness/README.md)** — how to set up, run, read diff reports, add scenarios, re-baseline.
 - [docs/firmware-map.md](docs/firmware-map.md) — what the firmware does (pins, MAX7221 chain, I2C protocol, patterns, risks).
 - [docs/decisions.md](docs/decisions.md) — assumptions and non-obvious choices.
+- [docs/i2c-protocol.md](docs/i2c-protocol.md) — the I2C register interface for controller authors.
+- **User documentation site**: `manual/` + `mkdocs.yml`, built with Zensical and published per
+  release with mike (`make docs-setup docs-gen docs-serve`). Releases: [RELEASING.md](RELEASING.md).
 
 ```sh
 make setup && make test

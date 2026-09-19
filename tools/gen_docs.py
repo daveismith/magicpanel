@@ -167,7 +167,7 @@ def pattern_page(seq: dict, desc: str, codes: list[int], fw: str) -> str:
 
 {desc}
 
-<div class="mp-player" data-src="sequence.json" data-title="{seq['name']}"></div>
+<div class="mp-player" data-src="sequence.json" data-gif="sequence.gif" data-title="{seq['name']}"></div>
 
 <noscript>![{seq['name']}](sequence.gif)</noscript>
 
@@ -184,7 +184,7 @@ simulation, at real speed.
 
 def gallery(catalogue: list[dict], descs: dict[int, str]) -> str:
     cards = "\n".join(
-        f'<a class="mp-card" href="{s["slug"]}/"><img src="{s["slug"]}/sequence.gif" alt="{s["name"]}" loading="lazy">'
+        f'<a class="mp-card" href="{s["slug"]}/index.html"><img src="{s["slug"]}/sequence.gif" alt="{s["name"]}" loading="lazy">'
         f'<span class="mp-card-title">{s["id"]} · {s["name"]}</span>'
         f'<span class="mp-card-sub">{fmt_ms(s["length_ms"])}</span></a>' for s in catalogue)
     return f"""# Patterns
@@ -264,8 +264,12 @@ def main() -> int:
     (pat_dir / "index.md").write_text(gallery(catalogue, descs))
     (args.out / "standalone-modes.md").write_text(standalone_table(modes, by_id))
     (args.out / "downloads.md").write_text(downloads(info["fw"], args.release_tag))
-    (args.out / "version.md").write_text(
-        f"These pages document **firmware v{info['fw']}** (I2C protocol v{info['proto']}).\n")
+    version = f"These pages document **firmware v{info['fw']}** (I2C protocol v{info['proto']})."
+    if not args.release_tag:
+        version = (f'!!! warning "Development build"\n    These pages describe unreleased firmware v{info["fw"]} '
+                   f'(I2C protocol v{info["proto"]}) from the `main` branch. For a released version, use '
+                   f'the version menu.')
+    (args.out / "version.md").write_text(version + "\n")
     print(f"wrote {args.out} for firmware v{info['fw']}: {len(catalogue)} patterns")
     return 0
 

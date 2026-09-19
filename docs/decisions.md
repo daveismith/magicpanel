@@ -221,3 +221,16 @@ RELEASING.md).
   `mike set-default latest` produce the expected branch.
 - *Pins kept apart.* The docs dependencies are in `requirements-docs.txt` (`make docs-setup`), so
   the harness/CI regression venv (`requirements.txt`) stays minimal.
+- *CI and releases.* A composite action (`.github/actions/toolchain`) holds the pinned setup
+  shared by the regression, docs and release workflows. `docs.yml` builds strictly on PRs and
+  publishes `dev` from `main`; its deploy job reuses the generated pages as an artefact, so only
+  that job gets `contents: write`. `release.yml` checks the tag against `FW_*`
+  (`tools/check_version.py`), runs the full suite, publishes `X.Y` (and moves `latest`, not for
+  `-rc` tags), and attaches the hex, ELF, header, offline docs and `SHA256SUMS`, with the
+  `CHANGELOG.md` section as notes. Both deploying workflows share the `gh-pages` concurrency
+  group.
+- *`latest` is a redirect alias* (`--alias-type redirect`), not mike's default symlink: it works
+  on any static host, including after a custom-domain move.
+- *No "unreleased" theme banner.* That needs a theme override, which Zensical does not take.
+  `dev` builds carry a warning admonition from `gen_docs.py` instead.
+

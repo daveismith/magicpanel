@@ -97,7 +97,12 @@
       fetch(root.getAttribute("data-src"))
         .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(data => build(root, data))
-        .catch(() => { root.textContent = "The player could not load this recording."; });
+        .catch(() => {                      // e.g. opened from disk (file://): show the GIF instead
+          const gif = root.getAttribute("data-gif");
+          if (!gif) { root.textContent = "The player could not load this recording."; return; }
+          const img = el("img", "mp-fallback", root);
+          img.src = gif; img.alt = root.getAttribute("data-title") || "";
+        });
     });
   }
   // Material/Zensical instant navigation exposes document$; plain page loads use DOMContentLoaded.

@@ -38,7 +38,8 @@ The release workflow then:
 3. generates and publishes the docs as `X.Y`, and moves `latest` to it (not for pre-releases);
 4. creates the GitHub Release with the `CHANGELOG.md` section as notes and these assets:
    `MagicPanel-vX.Y.Z.hex`, `.elf`, `SHA256SUMS`, `magicpanel_i2c.h` and an offline copy of the
-   docs.
+   docs (`make docs-offline`: plain `.html` links that work from disk; the pattern players fall
+   back to the GIFs there).
 
 ## Trying the pipeline
 
@@ -55,7 +56,7 @@ gh release delete v0.11.0-rc1 --cleanup-tag
 ```sh
 make docs-setup                 # once
 make docs-gen docs-serve        # live preview of the current tree
-.venv/bin/mike deploy 0.11 latest && .venv/bin/mike deploy dev   # local gh-pages only (no --push)
+.venv/bin/mike deploy --alias-type redirect --update-aliases 0.11 latest && .venv/bin/mike deploy dev   # local gh-pages only (no --push)
 make docs-preview-versions      # the version switcher over the local gh-pages branch
 ```
 

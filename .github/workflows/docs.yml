@@ -1,0 +1,97 @@
+name: docs
+
+# User documentation site (RELEASING.md, decision D-23). Pull requests: generate from the
+# firmware and build strictly, uploading the site as an artefact to preview. Pushes to main:
+# publish it as version `dev` on gh-pages. Releases are published by release.yml.
+on:
+  push:
+    branches: [main]
+    paths: &docs_paths
+      - "manual/**"
+      - "mkdocs.yml"
+      - "requirements-docs.txt"
+      - "CHANGELOG.md"
+      - "docs/i2c-protocol.md"
+      - "docs/magicpanel_i2c.h"
+      - "MagicPanel.ino"
+      - "tools/gen_docs.py"
+      - "tools/render_gif.py"
+      - "tools/mplib.py"
+      - "harness/**"
+      - ".github/workflows/docs.yml"
+      - ".github/actions/toolchain/**"
+  pull_request:
+    paths: *docs_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/toolchain
+        with:
+          docs: "true"
+
+      - name: Build firmware
+        run: make firmware
+
+      - name: Generate pattern pages from the firmware
+        run: make docs-gen
+
+      - name: Build the site (strict)
+        run: make docs-build
+
+      - name: Upload the site (preview)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: site-${{ github.sha }}
+          path: build/site
+          retention-days: 14
+
+      - name: Upload generated pages (for the deploy job)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: generated-${{ github.sha }}
+          path: manual/generated
+          retention-days: 1
+
+  deploy-dev:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write          # push to gh-pages
+    concurrency:
+      group: gh-pages          # shared with release.yml: one writer at a time
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Documentation toolchain
+        run: python -m venv .venv && make docs-setup
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: generated-${{ github.sha }}
+          path: manual/generated
+
+      - name: Publish as `dev`
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages --depth=1 || true
+          cp docs/magicpanel_i2c.h manual/reference/magicpanel_i2c.h
+          .venv/bin/mike deploy --push dev

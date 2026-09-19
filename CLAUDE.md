@@ -105,6 +105,15 @@ sensitive to the *order* of `random()` calls; see `docs/decisions.md` D-1/D-16.
 gated: it shows the diff first and applies only with `confirm=true`. Keep outputs small; the
 full artefacts are files under `runs/`.
 
+## User documentation site
+
+`manual/` (hand-written) + `mkdocs.yml`, built with Zensical; `make docs-gen` writes
+`manual/generated/` from `build/firmware.elf` (pattern pages, GIFs, player data; gitignored),
+`make docs-build` builds strictly. Versions go to `gh-pages` via mike from CI only
+(`.github/workflows/docs.yml`, `release.yml`; RELEASING.md). Zensical runs no MkDocs plugins or
+hooks, so generate content with tools, not build plugins (D-23). User-visible changes go in
+`CHANGELOG.md` under `Unreleased`.
+
 ## Conventions
 
 - Python tests are **pytest** (`tests/`, fixtures in `conftest.py`). No unittest.

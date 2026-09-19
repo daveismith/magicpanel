@@ -3,6 +3,7 @@
 
   tools/check_version.py v0.11.0        ->  docs_version=0.11  prerelease=false
   tools/check_version.py v0.12.0-rc1    ->  docs_version=0.12-rc  prerelease=true
+  tools/check_version.py --notes v0.11.0   the CHANGELOG.md section for 0.11.0 (release notes)
 
 Fails unless the tag is vMAJOR.MINOR.PATCH[-PRERELEASE] and MAJOR.MINOR.PATCH equals FW_MAJOR,
 FW_MINOR and FW_PATCH in MagicPanel.ino. Prints key=value lines, and appends them to
@@ -13,6 +14,7 @@ import os, re, sys
 from pathlib import Path
 
 SKETCH = Path(__file__).resolve().parent.parent / "MagicPanel.ino"
+CHANGELOG = SKETCH.parent / "CHANGELOG.md"
 TAG = re.compile(r"^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.]+))?$")
 
 
@@ -39,7 +41,18 @@ def check(tag: str, sketch: Path = SKETCH) -> dict[str, str]:
     return {"version": ".".join(map(str, fw)), "docs_version": docs, "prerelease": "true" if pre else "false"}
 
 
+def changelog_section(version: str, changelog: Path = CHANGELOG) -> str:
+    """The body of the `## [version]` section of CHANGELOG.md; fails if there is none."""
+    m = re.search(rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## |\Z)", changelog.read_text(), re.M | re.S)
+    if not m or not m.group(1).strip():
+        raise SystemExit(f"{changelog.name} has no entries for {version}: move them out of Unreleased first")
+    return m.group(1).strip() + "\n"
+
+
 def main() -> int:
+    if len(sys.argv) == 3 and sys.argv[1] == "--notes":
+        print(changelog_section(check(sys.argv[2])["version"]), end="")
+        return 0
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
     out = check(sys.argv[1])

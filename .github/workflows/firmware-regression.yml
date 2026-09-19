@@ -15,6 +15,7 @@ on:
       - "requirements.txt"
       - "Makefile"
       - ".github/workflows/firmware-regression.yml"
+      - ".github/actions/toolchain/**"
   pull_request:
     paths:
       - "MagicPanel.ino"
@@ -29,6 +30,7 @@ on:
       - "requirements.txt"
       - "Makefile"
       - ".github/workflows/firmware-regression.yml"
+      - ".github/actions/toolchain/**"
   workflow_dispatch:
 
 # Actions are pinned to full commit SHAs (immutable); the trailing comment records the release
@@ -46,45 +48,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Host packages (libelf for simavr)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libelf-dev pkg-config build-essential
-
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.12"
-
-      - name: Read pinned versions
-        id: pins
-        run: |
-          set -a; source tools/versions.env; set +a
-          echo "cli=$ARDUINO_CLI_VERSION" >> "$GITHUB_OUTPUT"
-          echo "core=$AVR_CORE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "simavr=$SIMAVR_SHA" >> "$GITHUB_OUTPUT"
-
-      # --- caches: arduino-cli binary + AVR core/toolchain, built libsimavr, python venv -----
-      - name: Cache arduino toolchain
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            tools/bin
-            tools/arduino-data
-          key: arduino-${{ runner.os }}-cli${{ steps.pins.outputs.cli }}-core${{ steps.pins.outputs.core }}-v1
-
-      - name: Cache libsimavr
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: third_party/simavr/simavr/obj-*
-          key: simavr-${{ runner.os }}-${{ steps.pins.outputs.simavr }}-v1
-
-      - name: Cache python venv
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-py3.12-${{ hashFiles('requirements.txt') }}
-
-      # --- setup (network only here) ----------------------------------------------------------
-      - name: Setup (pinned arduino-cli, AVR core, libsimavr, venv)
-        run: make setup
+      # pinned toolchain, caches, make setup + make harness (network only here)
+      - uses: ./.github/actions/toolchain
 
       # --- everything below runs without network ----------------------------------------------
       - name: Specimen guard + reference build (must reproduce the shipped ELF's flash image)
@@ -92,9 +57,6 @@ jobs:
 
       - name: Build dev firmware MagicPanel.ino (twice; must be deterministic)
         run: make firmware
-
-      - name: Build harness
-        run: make harness
 
       - name: Run all scenarios and compare to baselines
         run: .venv/bin/python -m pytest tests/test_regression.py -v
@@ -105,8 +67,11 @@ jobs:
       - name: Mutation self-test (every mutant must be detected)
         run: .venv/bin/python -m pytest tests/test_mutants.py -v
 
-      - name: MCP server acceptance and specimen tests
-        run: .venv/bin/python -m pytest tests/test_mcp.py tests/test_specimen.py -v
+      - name: I2C register interface (protocol v1 against the spec and header)
+        run: .venv/bin/python -m pytest tests/test_i2c_protocol.py -v
+
+      - name: MCP server, specimen and release tooling tests
+        run: .venv/bin/python -m pytest tests/test_mcp.py tests/test_specimen.py tests/test_check_version.py -v
 
       # --- failure diagnostics -----------------------------------------------------------------
       - name: Collect diff reports

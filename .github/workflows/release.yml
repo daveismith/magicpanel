@@ -1,0 +1,80 @@
+name: release
+
+# Tag vX.Y.Z (or vX.Y.Z-rcN): verify, build, test, publish the docs version and create the
+# GitHub Release with the firmware. See RELEASING.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write          # gh-pages push and the GitHub Release
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Tag matches the firmware version
+        id: ver
+        run: python3 tools/check_version.py "$GITHUB_REF_NAME"
+
+      - uses: ./.github/actions/toolchain
+        with:
+          docs: "true"
+
+      - name: Build firmware
+        run: make firmware
+
+      - name: Full test suite
+        run: make test PYTEST_ARGS=-q
+
+      - name: Generate and build the docs
+        run: |
+          make docs-gen DOCS_ARGS="--release-tag $GITHUB_REF_NAME"
+          make docs-build docs-offline
+
+      - name: Publish the docs version
+        env:
+          DOCS_VERSION: ${{ steps.ver.outputs.docs_version }}
+          PRERELEASE: ${{ steps.ver.outputs.prerelease }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages --depth=1 || true
+          if [ "$PRERELEASE" = "true" ]; then
+            .venv/bin/mike deploy --push "$DOCS_VERSION"
+          else
+            .venv/bin/mike deploy --push --update-aliases --alias-type redirect "$DOCS_VERSION" latest
+            .venv/bin/mike set-default --push latest
+          fi
+
+      - name: Release assets
+        run: |
+          tag="$GITHUB_REF_NAME"; mkdir -p dist
+          cp build/firmware.hex "dist/MagicPanel-$tag.hex"
+          cp build/firmware.elf "dist/MagicPanel-$tag.elf"
+          cp docs/magicpanel_i2c.h dist/
+          (cd build && mv site-offline "MagicPanel-$tag-docs" && zip -qr "../dist/MagicPanel-$tag-docs.zip" "MagicPanel-$tag-docs")
+          (cd dist && sha256sum -- * > SHA256SUMS)
+          python3 tools/check_version.py --notes "$tag" > dist/notes.md
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.ver.outputs.prerelease }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          flags=(--verify-tag --title "Magic Panel $tag" --notes-file dist/notes.md)
+          [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          gh release create "$tag" "${flags[@]}" \
+            "dist/MagicPanel-$tag.hex" "dist/MagicPanel-$tag.elf" dist/magicpanel_i2c.h \
+            "dist/MagicPanel-$tag-docs.zip" dist/SHA256SUMS

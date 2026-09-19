@@ -26,7 +26,7 @@ def test_generated_pages_match_firmware_and_are_deterministic(firmware, harness,
         assert (a / rel).read_bytes() == (b / rel).read_bytes(), f"{rel} differs between runs"
 
     assert len(list((a / "patterns").glob("*/index.md"))) == 42
-    assert "firmware v0.11.0" in (a / "version.md").read_text()
+    assert "unreleased firmware v0.11.0" in (a / "version.md").read_text()
     assert "[Flash all](../generated/patterns/26-flash-all/index.md)" in (a / "standalone-modes.md").read_text()
     for sid in map(int, ONLY.split(",")):
         page = next((a / "patterns").glob(f"{sid:02d}-*"))

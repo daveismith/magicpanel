@@ -16,3 +16,4 @@
 .md-typeset .mp-card img { width: 100%; height: auto; border-radius: 6px; }
 .mp-card-title { font-weight: 600; font-size: .75rem; }
 .mp-card-sub { font-size: .7rem; opacity: .7; }
+.mp-fallback { width: 256px; max-width: 100%; border-radius: 6px; }
