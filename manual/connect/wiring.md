@@ -1,22 +1,26 @@
 # Wiring
 
-TODO(owner): a photo of the panel's back with the connectors labelled.
+![Back of the Magic Panel with the connectors labelled](../images/board-back.jpg){width=500}
 
 ## Power
 
 5 V regulated. The panel draws most when every LED is lit (for example *On 5s* or *Alert*);
-size the supply for that. TODO(owner): measured current at full brightness.
+size the supply for that.
 
 ## I2C bus
 
-| Signal | ATmega328P pin | Notes |
-|---|---|---|
-| SDA | A4 (PC4) | |
-| SCL | A5 (PC5) | |
-| GND | GND | always connect ground to the controller |
-| 5 V | 5 V | if the panel is powered from the bus |
+<div class="mp-pins" markdown>
 
-TODO(owner): which header these are on, and its pin order.
+| Signal | Pin | ATmega328P pin | Notes |
+|---|---|---|---|
+| SDA | ❹ | A4 (PC4) | |
+| SCL | ❸ | A5 (PC5) | |
+| GND | ❷ | GND | always connect ground to the controller |
+| 5 V | ❶ | 5 V | if the panel is powered from the bus |
+
+</div>
+
+The pin column matches the marked pins in the image above.
 
 - **Address:** `0x14` (20 decimal). It is fixed.
 - **Speed:** 100 kHz. 400 kHz has not been tested.

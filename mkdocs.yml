@@ -39,6 +39,7 @@ extra:
     alias: true
 
 extra_css:
+  - css/manual.css
   - css/panel-player.css
 extra_javascript:
   - js/panel-player.js
