@@ -201,6 +201,10 @@ def main() -> int:
         return 3
     final = out / "firmware.elf"
     shutil.copy2(elf1, final)
+    hex_src = elf1.with_suffix(".hex")               # arduino-cli writes <sketch>.ino.hex beside the ELF
+    if hex_src.exists():
+        shutil.copy2(hex_src, out / "firmware.hex")
+        result["hex_sha256"] = sha256_file(out / "firmware.hex")
     meta = {
         "sketch": {"path": str(sketch.relative_to(REPO) if sketch.is_relative_to(REPO) else sketch),
                    "sha256": sha256_file(sketch), "bytes": sketch.stat().st_size},
