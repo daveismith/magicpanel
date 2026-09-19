@@ -36,17 +36,18 @@ def _font():
 
 
 def frame_image(rec: dict, idx: int, total: int, t_ms: float, end_ms: float, title: str, marker: str | None,
-                scale: int, font) -> Image.Image:
+                scale: int, font, plain: bool = False) -> Image.Image:
+    """One GIF frame. plain=True (user docs) keeps the panel and the progress bar only."""
     gap = max(2, scale // 6); cell = scale; pad = 14
     grid_px = 8 * cell
-    header_h = 62; footer_h = 34
+    header_h, footer_h = (14, 16) if plain else (62, 34)
     W = grid_px + 2 * pad; H = header_h + grid_px + footer_h
     im = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(im)
-    d.text((pad, 6), title, fill=TEXT, font=font)
-    caption = f"state {idx}/{total - 1}   t = {t_ms:9.3f} ms"
-    d.text((pad, 22), caption, fill=TEXT, font=font)
-    if marker:
-        d.text((pad, 38), marker[:48], fill=MARK, font=font)
+    if not plain:
+        d.text((pad, 6), title, fill=TEXT, font=font)
+        d.text((pad, 22), f"state {idx}/{total - 1}   t = {t_ms:9.3f} ms", fill=TEXT, font=font)
+        if marker:
+            d.text((pad, 38), marker[:48], fill=MARK, font=font)
     d.rectangle([pad - 4, header_h - 4, pad + grid_px + 3, header_h + grid_px + 3], fill=PANEL_BG)
     for r, row in enumerate(rec["grid"]):
         dev = r // 4
@@ -64,7 +65,8 @@ def frame_image(rec: dict, idx: int, total: int, t_ms: float, end_ms: float, tit
     if any(rec["shutdown"]): status += "  SHUTDOWN " + "/".join("Y" if s else "n" for s in rec["shutdown"])
     if any(rec["display_test"]): status += "  DISPLAY_TEST"
     if rec.get("orphan_bits"): status += f"  orphan={rec['orphan_bits']}"
-    d.text((pad, header_h + grid_px + 8), status, fill=DIM, font=font)
+    if not plain:
+        d.text((pad, header_h + grid_px + 8), status, fill=DIM, font=font)
     # progress bar over the whole sequence
     y = H - 6; frac = 0 if end_ms <= 0 else min(1.0, t_ms / end_ms)
     d.rectangle([pad, y, W - pad, y + 3], fill=(60, 60, 70))
@@ -85,9 +87,9 @@ def render(src_dir: Path, out: Path, title: str, speed: float = 1.0, min_frame_m
 
 def render_records(recs: list[dict], out: Path, title: str, markers: list[dict], total_cycles: int,
                    speed: float = 1.0, min_frame_ms: float = 20.0, all_states: bool = False, hold_ms: float = 1000.0,
-                   scale: int = 28, tail_ms: float | None = None) -> dict:
+                   scale: int = 28, tail_ms: float | None = None, plain: bool = False) -> dict:
     """Render display records to an animated GIF; markers are {cycle, text} captions; the timeline
-    ends at total_cycles."""
+    ends at total_cycles. plain=True drops the captions (user documentation)."""
     end_ms = total_cycles / mplib.CYCLES_PER_MS
     font = _font()
 
@@ -121,7 +123,7 @@ def render_records(recs: list[dict], out: Path, title: str, markers: list[dict],
 
     images, durations = [], []
     for rec, idx, t_ms, dur in frames:
-        images.append(frame_image(rec, idx, len(recs), t_ms, end_ms, title, marker_at(rec["cycle"]), scale, font))
+        images.append(frame_image(rec, idx, len(recs), t_ms, end_ms, title, marker_at(rec["cycle"]), scale, font, plain))
         durations.append(max(int(round(dur / speed)), 10))
     durations[-1] = max(durations[-1], int(hold_ms))
     out.parent.mkdir(parents=True, exist_ok=True)

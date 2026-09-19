@@ -38,6 +38,11 @@ extra:
     default: latest
     alias: true
 
+extra_css:
+  - css/panel-player.css
+extra_javascript:
+  - js/panel-player.js
+
 markdown_extensions:
   - admonition
   - attr_list
@@ -59,6 +64,7 @@ nav:
       - Upgrading from v010.5: upgrading.md
   - Use:
       - Standalone (rotary & jumpers): use/standalone.md
+      - Patterns: generated/patterns/index.md
       - I2C quick start: use/i2c-quickstart.md
       - Troubleshooting: troubleshooting.md
   - Reference:

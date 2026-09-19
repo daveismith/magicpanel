@@ -80,13 +80,18 @@ clean:
 docs-setup: venv  ## install the pinned docs toolchain (requirements-docs.txt)
 	@$(PY) -m pip install -q -r requirements-docs.txt
 
-docs-gen:         ## write the generated parts of the site (manual/generated/, the protocol header)
+docs-gen: harness ## write the generated parts of the site from build/firmware.elf (manual/generated/)
 	@cp docs/magicpanel_i2c.h manual/reference/magicpanel_i2c.h
+	$(PY) tools/gen_docs.py $(DOCS_ARGS)
 
-docs-build: docs-gen ## build the site strictly -> build/site/
+manual/generated/version.md:
+	$(MAKE) docs-gen
+
+docs-build: manual/generated/version.md ## build the site strictly -> build/site/ (run docs-gen first to refresh)
+	@cp docs/magicpanel_i2c.h manual/reference/magicpanel_i2c.h
 	.venv/bin/zensical build --strict --clean
 
-docs-serve: docs-gen ## serve the site locally with live reload
+docs-serve: manual/generated/version.md ## serve the site locally with live reload
 	.venv/bin/zensical serve
 
 docs-preview-versions: ## serve the local gh-pages branch with the version switcher (after mike deploy)
