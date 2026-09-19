@@ -17,7 +17,9 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 The firmware is loaded through the panel's serial bootloader. Connect a 5 V USB-serial adapter
 (FTDI or similar, with DTR for auto-reset) to the panel's serial programming header.
 
-TODO(owner): header location, pin order and a photo.
+Match the header's labels to the adapter: ground to ground, the panel's RX to the adapter's TX
+and its TX to the adapter's RX, and DTR to DTR. Check the 5 V and ground pins before you power
+anything up. Nothing else needs to be connected to upload.
 
 ## 3. Upload
 

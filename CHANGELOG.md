@@ -6,7 +6,7 @@ All notable changes to the Magic Panel firmware. The format follows
 
 ## [Unreleased]
 
-## [0.12.0]
+## [0.12.0] - 2026-09-19
 
 First release of this firmware, a compatible successor to IA-PARTS Magic Panel FX v010.5 and to
 TheJugg1er's v010.6/v011. The version number 0.11 is skipped because v011 exists already.
