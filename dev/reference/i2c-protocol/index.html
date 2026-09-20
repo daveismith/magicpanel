@@ -85,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#magic-panel-i2c-interface-protocol-v10" class="md-skip">
+        <a href="#magic-panel-i2c-interface-protocol-v11" class="md-skip">
           Skip to content
         </a>
       
@@ -950,6 +950,34 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#54-what-disturbs-a-running-sequence" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        5.4 What disturbs a running sequence
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.4 What disturbs a running sequence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#talking-to-firmware-v0120-protocol-v10-safely" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Talking to firmware v012.0 (protocol v1.0) safely
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1018,10 +1046,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#81-catalogue-v10" class="md-nav__link">
+  <a href="#81-catalogue-v11" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        8.1 Catalogue v1.0
+        8.1 Catalogue v1.1
       </span>
     </span>
   </a>
@@ -1289,6 +1317,34 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#54-what-disturbs-a-running-sequence" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        5.4 What disturbs a running sequence
+      </span>
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="5.4 What disturbs a running sequence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#talking-to-firmware-v0120-protocol-v10-safely" class="md-nav__link">
+    <span class="md-ellipsis">
+      <span class="md-typeset">
+        Talking to firmware v012.0 (protocol v1.0) safely
+      </span>
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1357,10 +1413,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#81-catalogue-v10" class="md-nav__link">
+  <a href="#81-catalogue-v11" class="md-nav__link">
     <span class="md-ellipsis">
       <span class="md-typeset">
-        8.1 Catalogue v1.0
+        8.1 Catalogue v1.1
       </span>
     </span>
   </a>
@@ -1423,9 +1479,10 @@
   
 
 
-<h1 id="magic-panel-i2c-interface-protocol-v10">Magic Panel I2C interface — protocol v1.0<a class="headerlink" href="#magic-panel-i2c-interface-protocol-v10" title="Permanent link">&para;</a></h1>
-<p>This document specifies how an I2C controller talks to a Magic Panel running firmware <strong>v012.0
-or later</strong>. It is written for two readers: authors of controller code (a droid's dome
+<h1 id="magic-panel-i2c-interface-protocol-v11">Magic Panel I2C interface — protocol v1.1<a class="headerlink" href="#magic-panel-i2c-interface-protocol-v11" title="Permanent link">&para;</a></h1>
+<p>This document specifies how an I2C controller talks to a Magic Panel running firmware <strong>v012.1
+or later</strong>. (v012.0 answers protocol v1.0 and differs only as section 5.4 describes.) It is
+written for two readers: authors of controller code (a droid's dome
 controller, a test rig, a Python script) and maintainers of <code>MagicPanel.ino</code>, who implement it.
 Constants for C/C++ controllers are in <a href="../magicpanel_i2c.h"><code>magicpanel_i2c.h</code></a>; that header is
 normative for the numeric values below and is what the firmware test-suite uses.</p>
@@ -1881,10 +1938,7 @@ main-loop engine introduced in the development sketch, see <code>docs/decisions.
 <li>An iteration is one complete run of the sequence as listed in the catalogue, including the
   panel clear before/after that most sequences do.</li>
 <li>The random shows (IDs 56, 57) never end by themselves; <code>repeat</code> is ignored for them.</li>
-<li><strong>Every write</strong> to the panel (including the pointer write before a status read) restarts the
-  random show's dark pause, as v010.5's handler did. Polling a random show every few seconds
-  therefore keeps it dark; poll rarely, or not at all, while one runs. Reads alone do not
-  affect it.</li>
+<li>A random show is not disturbed by anything but <code>START</code> and <code>STOP</code>; see section 5.4.</li>
 <li>When the run ends and a rotary/jumper mode is selected, that mode restarts (<code>SOURCE =
   GPIO_RESUME</code>) unless <code>CONFIG.GPIO_RESUME</code> is clear. The finished run's result is then no
   longer visible in <code>STATE</code>; compare <code>RUN_COUNTER</code> (section 6.2).</li>
@@ -1901,6 +1955,39 @@ nothing) and leaves the status unchanged. Other <code>mode</code> values: <code>
 <p>MAX7221 intensity <code>0</code>–<code>15</code> for both drivers, applied at once and kept until changed or reset.
 Values above 15: <code>BAD_VALUE</code>. At power-on it is loaded from <code>DEFAULT_BRIGHTNESS</code> (section 7).
 Brightness <code>0</code> is dim, not off; use <code>STOP</code> with mode 0 to blank.</p>
+<h3 id="54-what-disturbs-a-running-sequence">5.4 What disturbs a running sequence<a class="headerlink" href="#54-what-disturbs-a-running-sequence" title="Permanent link">&para;</a></h3>
+<p>Only <code>START</code> and <code>STOP</code> change what the panel is playing. Reading any register, setting the
+register pointer, and writing <code>BRIGHTNESS</code>, <code>CONFIG</code>, <code>DEFAULT_BRIGHTNESS</code>, <code>ORIENTATION</code>,
+<code>SAVE</code> or <code>INFO_INDEX</code> leave the running sequence, the random shows' timing and the
+pseudo-random generator untouched, so a controller may poll and adjust the panel as often as it
+likes.</p>
+<p>Three things are worth knowing:</p>
+<ul>
+<li>a <strong>one-byte legacy command</strong> (section 4) does still advance the generator and restart a
+  random show's dark pause, exactly as firmware v010.5 did. This is deliberate: that path exists
+  for v010.5 controllers, quirks included;</li>
+<li><code>CONFIG</code> with <code>GPIO_ENABLE</code> going from clear to set starts the selected rotary/jumper mode,
+  which is what that bit is for (section 7);</li>
+<li><code>SAVE</code> writes the EEPROM bytes that changed, about 3.4 ms each, during which no frame is
+  clocked out. A sequence continues, but one frame can land a few milliseconds late. Save
+  settings between sequences if that matters.</li>
+</ul>
+<h4 id="talking-to-firmware-v0120-protocol-v10-safely">Talking to firmware v012.0 (protocol v1.0) safely<a class="headerlink" href="#talking-to-firmware-v0120-protocol-v10-safely" title="Permanent link">&para;</a></h4>
+<p>On v012.0 <strong>every</strong> message — a register write, the one-byte pointer write before a read, even
+an empty write — restarted a random show's dark pause, because the firmware applied v010.5's
+per-message side effect to register traffic too. The pause is around a minute, so a controller
+that writes more often than that keeps the panel dark for as long as it keeps talking, while
+the status block still reports the show as running.</p>
+<p>Reads alone were always harmless, and the register pointer does not move by itself, so a
+controller that must support v012.0 can poll without writing at all:</p>
+<div class="highlight"><pre><span></span><code>write [0x90]                 ; once: pointer := STATUS
+loop:
+    read 16                  ; as often as you like, no write
+</code></pre></div>
+<p>Re-address only when you need a different register, and prefer to make configuration changes
+(brightness, orientation, <code>SAVE</code>) when no random show is running. Read <code>PROTO_MINOR</code> (section
+6.1) to tell the two apart: <code>0</code> needs this care, <code>1</code> does not. The same applies while a
+rotary/jumper random show is running (codes 6, 7 and 9), not only to shows started over I2C.</p>
 <hr />
 <h2 id="6-identity-and-status">6. Identity and status<a class="headerlink" href="#6-identity-and-status" title="Permanent link">&para;</a></h2>
 <h3 id="61-identity-0x000x09">6.1 Identity (0x00–0x09)<a class="headerlink" href="#61-identity-0x000x09" title="Permanent link">&para;</a></h3>
@@ -1909,7 +1996,7 @@ Brightness <code>0</code> is dim, not off; use <code>STOP</code> with mode 0 to 
 <tr>
 <th>Reg</th>
 <th>Name</th>
-<th>Value in v1.0</th>
+<th>Value in v1.1</th>
 </tr>
 </thead>
 <tbody>
@@ -1926,12 +2013,12 @@ Brightness <code>0</code> is dim, not off; use <code>STOP</code> with mode 0 to 
 <tr>
 <td>0x03</td>
 <td><code>PROTO_MINOR</code></td>
-<td>0 — incremented for compatible additions</td>
+<td>1 — incremented for compatible additions (1: register accesses no longer disturb a running sequence, section 5.4)</td>
 </tr>
 <tr>
 <td>0x04–0x06</td>
 <td><code>FW_MAJOR/MINOR/PATCH</code></td>
-<td>0, 12, 0 (firmware v012.0, which follows v011)</td>
+<td>0, 12, 1 (firmware v012.1, which follows v011)</td>
 </tr>
 <tr>
 <td>0x07</td>
@@ -2129,7 +2216,7 @@ read  22 bytes          ; id, flags, length_ms (u32 LE), name[16]
 </tr>
 </tbody>
 </table>
-<h3 id="81-catalogue-v10">8.1 Catalogue v1.0<a class="headerlink" href="#81-catalogue-v10" title="Permanent link">&para;</a></h3>
+<h3 id="81-catalogue-v11">8.1 Catalogue v1.1<a class="headerlink" href="#81-catalogue-v11" title="Permanent link">&para;</a></h3>
 <p>Lengths are what <code>INFO_LENGTH_MS</code> returns. They are measured, not computed from the nominal
 delays: <code>tools/measure_lengths.py</code> starts each sequence on the simulated panel and reads the
 firmware's own <code>ELAPSED_MS</code> at completion, so they include the ~7.5 ms it takes to clock out
@@ -2290,7 +2377,7 @@ command 3. Sequences flagged <code>VARIES</code> wait for random times, so their
 <td>20</td>
 <td><code>Cross</code></td>
 <td>HOLD</td>
-<td>3024</td>
+<td>3023</td>
 <td>an X for 3 s</td>
 </tr>
 <tr>
@@ -2360,7 +2447,7 @@ command 3. Sequences flagged <code>VARIES</code> wait for random times, so their
 <td>30</td>
 <td><code>One loop</code></td>
 <td></td>
-<td>5122</td>
+<td>5121</td>
 <td>one dot circles the panel</td>
 </tr>
 <tr>
@@ -2374,14 +2461,14 @@ command 3. Sequences flagged <code>VARIES</code> wait for random times, so their
 <td>32</td>
 <td><code>Test pixel</code></td>
 <td></td>
-<td>2427</td>
+<td>2426</td>
 <td>one pixel walks the panel</td>
 </tr>
 <tr>
 <td>33</td>
 <td><code>Symbol AI</code></td>
 <td>HOLD</td>
-<td>3024</td>
+<td>3023</td>
 <td>Aurebesh "AI" logo, 3 s</td>
 </tr>
 <tr>
@@ -2423,7 +2510,7 @@ command 3. Sequences flagged <code>VARIES</code> wait for random times, so their
 <td>39</td>
 <td><code>Random pixel</code></td>
 <td>RANDOM</td>
-<td>6638</td>
+<td>6636</td>
 <td>single random pixels</td>
 </tr>
 <tr>
@@ -2444,14 +2531,14 @@ command 3. Sequences flagged <code>VARIES</code> wait for random times, so their
 <td>42</td>
 <td><code>Flicker</code></td>
 <td>RANDOM, VARIES</td>
-<td>2092</td>
+<td>2081</td>
 <td>whole panel flickers at random, like the MarcDuino alert</td>
 </tr>
 <tr>
 <td>43</td>
 <td><code>Flicker long</code></td>
 <td>RANDOM, VARIES</td>
-<td>4228</td>
+<td>4169</td>
 <td>the same, twice as long</td>
 </tr>
 <tr>
@@ -2514,7 +2601,7 @@ command 3. Sequences flagged <code>VARIES</code> wait for random times, so their
 <td>52</td>
 <td><code>VU meter bottom</code></td>
 <td>RANDOM</td>
-<td>4710</td>
+<td>4709</td>
 <td>bouncing bars rising from the bottom</td>
 </tr>
 <tr>
@@ -2535,7 +2622,7 @@ command 3. Sequences flagged <code>VARIES</code> wait for random times, so their
 <td>55</td>
 <td><code>VU meter right</code></td>
 <td>RANDOM</td>
-<td>4710</td>
+<td>4709</td>
 <td>bouncing bars from the right</td>
 </tr>
 <tr>
@@ -2628,8 +2715,8 @@ moving it to 0 lets a running I2C sequence finish.</p>
 <p>Bytes are shown as they go on the wire after the address.</p>
 <p><strong>Probe and identify</strong></p>
 <div class="highlight"><pre><span></span><code>write [0x80]                 ; pointer := WHO_AM_I
-read 10  -&gt; 4D 50 01 00 00 0C 00 3A 3F 14
-            "MP" proto 1.0  fw 0.12.0  58 seqs  caps  addr
+read 10  -&gt; 4D 50 01 01 00 0C 01 3A 3F 14
+            "MP" proto 1.1  fw 0.12.1  58 seqs  caps  addr
 </code></pre></div>
 <p>Anything other than <code>4D 50</code> means firmware v011 or older: use legacy commands only.</p>
 <p><strong>Enumerate the catalogue</strong></p>
