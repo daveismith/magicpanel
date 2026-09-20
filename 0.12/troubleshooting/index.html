@@ -880,8 +880,10 @@
   them with the register and <code>end = 1</code> to blank at the end.</dd>
 <dt><strong>A random show stays dark.</strong></dt>
 <dd><em>Random show long</em> (position 7) plays one pattern and then stays dark (legacy behaviour).
-  <em>Random show</em> is dark for about a minute between patterns; frequent I2C polling restarts that
-  pause (<a href="../use/i2c-quickstart/#common-tasks">details</a>).</dd>
+  <em>Random show</em> is dark for about a minute between patterns, which is normal. If it never lights
+  up again while a controller is connected, check the firmware version: on 0.12.0 any write more
+  often than that — a status poll included — restarts the pause. Upgrade, or poll without
+  writing (<a href="../use/i2c-quickstart/#check-the-connection">details</a>).</dd>
 <dt><strong>The panel ignores one-byte commands.</strong></dt>
 <dd>Legacy commands may have been switched off (<code>CONFIG</code> bit 0). Read register <code>0x30</code>. To restore
   every setting to factory values, write <code>[0xBF, 0x5A]</code>.</dd>

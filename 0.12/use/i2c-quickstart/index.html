@@ -1174,11 +1174,25 @@ and C++ are in <a href="../../reference/magicpanel_i2c.h"><code>magicpanel_i2c.h
 </tr>
 </tbody>
 </table>
+<div class="admonition note">
+<p class="admonition-title">Polling is free</p>
+<p>Reading the panel — as often as you like — never disturbs what it is playing, and neither
+does changing the brightness or the orientation or saving settings. Only <em>start</em> and <em>stop</em>
+do. One exception: a <strong>one-byte command</strong> still restarts a random show's dark pause, because
+that path behaves exactly as firmware v010.5 did.</p>
+</div>
 <div class="admonition warning">
-<p class="admonition-title">Polling a random show</p>
-<p>Every write to the panel, including the pointer write before a status read, restarts the
-random show's dark pause (as firmware v010.5 did). While a random show runs, poll rarely or
-not at all, or it will stay dark.</p>
+<p class="admonition-title">Panels running firmware 0.12.0</p>
+<p>On 0.12.0 every <em>write</em> restarted a random show's dark pause — including the one-byte pointer
+write before a status read. A controller that wrote more often than about once a minute kept
+the panel dark while the status still reported the show as running. Reads alone were always
+safe, and the register pointer stays where you put it, so you can poll such a panel without
+writing at all:</p>
+<div class="highlight"><pre><span></span><code>write [0x90]        once: point at the status block
+read 16             then read as often as you like
+</code></pre></div>
+<p>Read <code>PROTO_MINOR</code> (byte 3 of the identity block) to tell them apart: <code>0</code> needs this care,
+<code>1</code> does not.</p>
 </div>
 <h2 id="knowing-when-a-sequence-has-finished">Knowing when a sequence has finished<a class="headerlink" href="#knowing-when-a-sequence-has-finished" title="Permanent link">&para;</a></h2>
 <p>Read the status block before and after starting. <code>RUN_COUNTER</code> (byte 12) goes up by one for every
