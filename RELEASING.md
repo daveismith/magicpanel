@@ -47,16 +47,19 @@ Push a pre-release tag such as `v0.12.0-rc1`. It publishes docs `0.12-rc` and a 
 without touching `latest`. To remove it afterwards:
 
 ```sh
-.venv/bin/mike delete --push 0.12-rc
+PATH="$PWD/.venv/bin:$PATH" .venv/bin/mike delete --push 0.12-rc
 gh release delete v0.12.0-rc1 --cleanup-tag
 ```
+
+mike runs the site builder as a subprocess, so the venv must be on `PATH`; calling
+`.venv/bin/mike` by path alone fails with `No such file or directory: 'zensical'`.
 
 ## Previewing locally
 
 ```sh
 make docs-setup                 # once
 make docs-gen docs-serve        # live preview of the current tree
-.venv/bin/mike deploy --alias-type redirect --update-aliases 0.12 latest && .venv/bin/mike deploy dev   # local gh-pages only (no --push)
+PATH="$PWD/.venv/bin:$PATH" .venv/bin/mike deploy --alias-type redirect --update-aliases 0.12 latest   # local gh-pages only (no --push)
 make docs-preview-versions      # the version switcher over the local gh-pages branch
 ```
 

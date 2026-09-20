@@ -43,10 +43,13 @@ jobs:
           make docs-build docs-offline
 
       - name: Publish the docs version
+        # mike runs `zensical` as a subprocess, so the venv has to be on PATH (calling
+        # .venv/bin/mike by path is not enough).
         env:
           DOCS_VERSION: ${{ steps.ver.outputs.docs_version }}
           PRERELEASE: ${{ steps.ver.outputs.prerelease }}
         run: |
+          export PATH="$PWD/.venv/bin:$PATH"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin gh-pages --depth=1 || true

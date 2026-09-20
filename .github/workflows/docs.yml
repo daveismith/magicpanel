@@ -89,7 +89,10 @@ jobs:
           path: manual/generated
 
       - name: Publish as `dev`
+        # mike runs `zensical` as a subprocess, so the venv has to be on PATH (calling
+        # .venv/bin/mike by path is not enough).
         run: |
+          export PATH="$PWD/.venv/bin:$PATH"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin gh-pages --depth=1 || true
