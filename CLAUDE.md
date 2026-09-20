@@ -103,8 +103,13 @@ sensitive to the *order* of `random()` calls; see `docs/decisions.md` D-1/D-16.
   56 and 57 and `SEQ_COUNT` is 58. `DrawHalf()` is `__attribute__((flatten))` on purpose: without
   it `lc.setRow()` stops being inlined into `PrintGrid()` and every frame costs ~400 cycles more.
   Catalogue flag `VARIES` (0x10) marks the two flicker sequences, whose length is only typical.
-- **Version:** the dev sketch is v012 (firmware 0.12.0), the successor to v010.5 and to
-  TheJugg1er's v010.6/v011; the number 0.11 is skipped because v011 exists already.
+- **What I2C traffic disturbs (D-27):** only register `START`/`STOP` and one-byte legacy
+  commands affect a running sequence. Only the legacy path advances `random()` and resets
+  `RandomTime` (v010.5 fidelity, D-16); register accesses must not, or polling holds a random
+  show dark. `consumeI2C()`'s early return must keep testing `pendAction`, or register
+  start/stop is dropped.
+- **Version:** the dev sketch is v012 (firmware 0.12.1, protocol v1.1), the successor to v010.5
+  and to TheJugg1er's v010.6/v011; the number 0.11 is skipped because v011 exists already.
 
 ## Using the MCP server from Claude Code
 

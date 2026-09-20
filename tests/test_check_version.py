@@ -27,7 +27,7 @@ def test_rejected_tags(tmp_path, tag):
 
 
 def test_dev_sketch_has_a_version():
-    assert check_version.firmware_version() == (0, 12, 0)
+    assert check_version.firmware_version() == (0, 12, 1)
 
 
 def test_changelog_section(tmp_path):

@@ -106,10 +106,26 @@ with SMBus(1) as bus:
 | Ignore one-byte commands from now on | `[0xB0, 0x06]`, then `[0xBF, 0xA5]` to keep it after power-off |
 | Turn the picture 180° (panel installed the other way up) | `[0xB2, 1]`, then `[0xBF, 0xA5]` to keep it |
 
-!!! warning "Polling a random show"
-    Every write to the panel, including the pointer write before a status read, restarts the
-    random show's dark pause (as firmware v010.5 did). While a random show runs, poll rarely or
-    not at all, or it will stay dark.
+!!! note "Polling is free"
+    Reading the panel — as often as you like — never disturbs what it is playing, and neither
+    does changing the brightness or the orientation or saving settings. Only *start* and *stop*
+    do. One exception: a **one-byte command** still restarts a random show's dark pause, because
+    that path behaves exactly as firmware v010.5 did.
+
+!!! warning "Panels running firmware 0.12.0"
+    On 0.12.0 every *write* restarted a random show's dark pause — including the one-byte pointer
+    write before a status read. A controller that wrote more often than about once a minute kept
+    the panel dark while the status still reported the show as running. Reads alone were always
+    safe, and the register pointer stays where you put it, so you can poll such a panel without
+    writing at all:
+
+    ```
+    write [0x90]        once: point at the status block
+    read 16             then read as often as you like
+    ```
+
+    Read `PROTO_MINOR` (byte 3 of the identity block) to tell them apart: `0` needs this care,
+    `1` does not.
 
 ## Knowing when a sequence has finished
 

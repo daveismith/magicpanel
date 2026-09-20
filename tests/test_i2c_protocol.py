@@ -68,7 +68,9 @@ def panel_factory(firmware, harness, tmp_path):
     panels = []
 
     def make(**kw) -> Panel:
-        p = Panel(firmware, tmp_path / f"run{len(panels)}", **kw)
+        out = tmp_path / f"run{len(panels)}"
+        p = Panel(firmware, out, **kw)
+        p.outdir = out
         panels.append(p)
         p.step(30)                        # setup() done
         return p
@@ -100,14 +102,14 @@ def eeprom_image(path: Path, cfg: int, bright: int, orient: int = 0, checksum: i
 # ---------------------------------------------------------------------------------- identity
 def test_identity(panel):
     assert panel.read(C["MP_WHO_AM_I"], 10) == [
-        C["MP_WHO_AM_I_0"], C["MP_WHO_AM_I_1"], C["MP_PROTO_MAJOR_VALUE"], C["MP_PROTO_MINOR_VALUE"], 0, 12, 0,
+        C["MP_WHO_AM_I_0"], C["MP_WHO_AM_I_1"], C["MP_PROTO_MAJOR_VALUE"], C["MP_PROTO_MINOR_VALUE"], 0, 12, 1,
         len(_spec_catalogue()), 0x3F, C["MP_I2C_ADDR"]]
 
 
 def test_pointer_persists_and_unmapped_reads_zero(panel):
     panel.cmd(f"i2c_write 0x14 {C['MP_REG_BIT'] | C['MP_FW_MINOR']}")
-    assert panel.cmd("i2c_read 0x14 2")["bytes"] == [12, 0]
-    assert panel.cmd("i2c_read 0x14 2")["bytes"] == [12, 0]      # no auto-advance between reads
+    assert panel.cmd("i2c_read 0x14 2")["bytes"] == [12, 1]
+    assert panel.cmd("i2c_read 0x14 2")["bytes"] == [12, 1]      # no auto-advance between reads
     assert panel.read(0x0A, 6) == [0] * 6
     assert panel.read(0x7E, 4) == [0] * 4                         # past 0x7F reads 0
 
@@ -210,6 +212,110 @@ def test_random_show(panel):
         subs.add(s["sub"])
         panel.step(200)
     assert len(subs) >= 2                                         # it played something, then paused (or vice versa)
+
+
+def _run(panel, ms: int, step: int = 50, traffic=None) -> None:
+    """Advance the panel, optionally with `traffic(panel)` every `step` ms."""
+    for _ in range(ms // step):
+        panel.step(step)
+        if traffic:
+            traffic(panel)
+
+
+def _frames(panel, settle_ms: float = 50) -> list[tuple[str, ...]]:
+    """The pictures the panel settled on, in order, timing ignored and repeats collapsed.
+    Reading the recording rather than sampling `display` keeps the comparison free of sampling
+    phase, and 50 ms (against the 150 ms of the shortest step here) drops the intermediate
+    states of a frame whose clock-out an I2C interrupt stretched."""
+    panel.close()
+    out: list[tuple[str, ...]] = []
+    for r in mplib.settled_display(mplib.read_jsonl(panel.outdir / "display.jsonl"), settle_ms):
+        g = tuple(r["grid"])
+        if not out or out[-1] != g:
+            out.append(g)
+    return out
+
+
+def _same_animation(a: list, b: list, least: int = 15) -> bool:
+    """Do two recordings show the same thing? Compared over their common length: an I2C
+    transaction costs simulated time, so a panel that was talked to has advanced further."""
+    n = min(len(a), len(b))
+    assert n >= least, f"only {n} frames recorded: the comparison would prove nothing"
+    return a[:n] == b[:n]
+
+
+def _lit_runs(frames: list[tuple[str, ...]]) -> int:
+    """How many times the panel went from dark to lit."""
+    runs, was_lit = 0, True                       # the sequence starts lit; count later starts only
+    for f in frames:
+        lit = any("1" in row for row in f)
+        runs += lit and not was_lit
+        was_lit = lit
+    return runs
+
+
+# ------------------------------------------------- what disturbs a running sequence (5.4, D-27)
+def _reg_traffic(p):
+    """Everything a controller might do that must not disturb the sequence."""
+    p.cmd(f"i2c_write_read 0x14 16 {C['MP_REG_BIT'] | C['MP_STATUS']}")   # poll: pointer write + read
+    p.cmd("i2c_read 0x14 16")                                             # read with no write
+    p.cmd(f"i2c_write 0x14 {C['MP_REG_BIT'] | C['MP_BRIGHTNESS']} 15")
+    p.cmd(f"i2c_write 0x14 {C['MP_REG_BIT'] | C['MP_ORIENTATION']} 0")
+    p.cmd(f"i2c_write 0x14 {C['MP_REG_BIT'] | C['MP_INFO_INDEX']} 3")
+    p.cmd(f"i2c_write 0x14 {C['MP_REG_BIT'] | C['MP_SAVE']} {C['MP_SAVE_MAGIC']}")
+    p.cmd("i2c_write 0x14")                                               # address-only probe
+
+
+def test_register_traffic_does_not_change_a_random_sequence(panel_factory):
+    """Random pixel (39) draws its pixels from the PRNG. Register accesses must not advance it,
+    so a chatty controller sees exactly the same animation as a silent one."""
+    quiet, busy = panel_factory(), panel_factory()
+    quiet.start(39)
+    busy.start(39)
+    _run(quiet, 3000)
+    _run(busy, 3000, traffic=_reg_traffic)
+    assert _same_animation(_frames(quiet), _frames(busy))
+
+
+def test_legacy_command_still_advances_the_generator(panel_factory):
+    """The one-byte path keeps v010.5's side effect (D-16): every message advances random(),
+    which changes what a random sequence draws next."""
+    quiet, chatty = panel_factory(), panel_factory()
+    quiet.start(39)
+    chatty.start(39)
+    _run(quiet, 3000)
+    _run(chatty, 3000, traffic=lambda p: p.cmd("i2c_write 0x14 56"))          # 56: no such command
+    assert not _same_animation(_frames(quiet), _frames(chatty))
+
+
+def test_register_start_and_stop_still_reach_the_engine(panel):
+    """START/STOP arrive without the legacy counter, so consumeI2C must notice them on their own."""
+    panel.start(26)
+    assert panel.status()["state"] == C["MP_STATE_RUNNING"]
+    panel.write(C["MP_REG_BIT"] | C["MP_STOP"], C["MP_STOP_BLANK"])
+    assert panel.status()["state"] == C["MP_STATE_STOPPED"] and panel.lit() == 0
+    panel.start(20)                                   # and a start after a quiet spell still works
+    assert panel.status()["state"] == C["MP_STATE_RUNNING"]
+
+
+@pytest.mark.slow
+def test_polling_does_not_hold_a_random_show_dark(panel_factory):
+    """A random show pauses for about a minute between patterns. Polling twice a second (which
+    on firmware v012.0 restarted that pause every time) must not stop the next pattern."""
+    panel = panel_factory()
+    panel.start(C["MP_SEQ_RANDOM_SHOW"])
+    _run(panel, 110_000, step=500, traffic=_reg_traffic)
+    assert _lit_runs(_frames(panel)) >= 1, "no pattern after the first pause: polling holds it dark"
+
+
+@pytest.mark.slow
+def test_legacy_traffic_still_restarts_the_pause(panel_factory):
+    """The mirror image: one-byte commands keep v010.5's behaviour, so a v010.5-style controller
+    that talks constantly still holds the show dark."""
+    panel = panel_factory()
+    panel.start(C["MP_SEQ_RANDOM_SHOW"])
+    _run(panel, 110_000, step=500, traffic=lambda p: p.cmd("i2c_write 0x14 56"))
+    assert _lit_runs(_frames(panel)) == 0, "the dark pause ended although the panel was written to"
 
 
 # ---------------------------------------------------------------------------------- GPIO interplay

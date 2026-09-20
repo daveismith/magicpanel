@@ -9,23 +9,24 @@
     "elf": {
       "absolute_repo_path_in_elf": false,
       "deterministic": true,
-      "elf_sha256": "2cd4e633fd7501216048887c18192f630b64e0b718e2b1d366a09ebe12470425",
-      "flash_bytes": 21070,
-      "flash_sha256": "a160129b16f27cf186477b1f56fbba69e64dce4e0e4d8aca8492c6c08cbaeff5",
+      "elf_sha256": "c148a3ed85471d83626916c55d521035b76a943f70cc1298026c718b9c3851f6",
+      "flash_bytes": 24998,
+      "flash_sha256": "8f59b259465268d73c9eb827777f27127c4d9b54cfbd4bb8e68c165e22344b9e",
+      "hex_sha256": "b34a4cf20511808d87bee8b997872f9402a341b31bce43cfe078431e0e21b5ba",
       "path": "build/firmware.elf",
       "second_build": {
-        "elf_sha256": "2cd4e633fd7501216048887c18192f630b64e0b718e2b1d366a09ebe12470425",
-        "flash_sha256": "a160129b16f27cf186477b1f56fbba69e64dce4e0e4d8aca8492c6c08cbaeff5"
+        "elf_sha256": "c148a3ed85471d83626916c55d521035b76a943f70cc1298026c718b9c3851f6",
+        "flash_sha256": "8f59b259465268d73c9eb827777f27127c4d9b54cfbd4bb8e68c165e22344b9e"
       }
     },
     "firmware_git": {
       "dirty": true,
-      "sha": "16f124d0454ec02f50c765d7597812432dbf8d1a"
+      "sha": "f736cce9453ef4995687e2dd35ecf7096fa51e0c"
     },
     "sketch": {
-      "bytes": 56852,
+      "bytes": 69086,
       "path": "MagicPanel.ino",
-      "sha256": "40d9f9f5c9e474b3e3603ff68b51259e7b1fc0ceb22da0a65a09e155af745088"
+      "sha256": "8511545b041d377afcf466602ebd92072038aa14d11957097eec0836f43c7f52"
     },
     "toolchain": {
       "arduino_cli_commit": "01f3d4f2b",
@@ -52,15 +53,15 @@
       }
     }
   },
-  "canonical_hash": "6723cdef0ee156394cf02c5ed36b94d1d982e023b67f54aa1c701a8fa2a0db5d",
+  "canonical_hash": "f9bf8cea9d14e1fe56ab673b53aa23acf23dc14e03c20c5d4d841504a0083c6e",
   "counts": {
-    "display_changes": 71,
+    "display_changes": 271,
     "empty_latches": 1,
     "events": 4,
-    "frames": 87224,
+    "frames": 90828,
     "gpio_changes": 9,
     "i2c_transactions": 1,
-    "latches": 43612,
+    "latches": 45414,
     "malformed_bursts": 0,
     "script_steps": 2
   },
@@ -113,33 +114,33 @@
   },
   "firmware": {
     "elf": "/Users/davids/Documents/Source/git/magicpanel/build/firmware.elf",
-    "elf_sha256": "2cd4e633fd7501216048887c18192f630b64e0b718e2b1d366a09ebe12470425"
+    "elf_sha256": "c148a3ed85471d83626916c55d521035b76a943f70cc1298026c718b9c3851f6"
   },
-  "harness_version": "0.1.0",
+  "harness_version": "0.3.0",
   "markers": [
     {
-      "cycle": 1600001,
-      "ns": 100000062.5,
-      "text": "reg 0x20 START [40]"
+      "cycle": 1600000,
+      "ns": 100000000.0,
+      "text": "reg 0x20 START [56]"
     }
   ],
   "mcu": "atmega328p",
   "scenario": {
     "compare_mode": "settled",
-    "description": "Register START of the random show (catalogue 40, rotary modes 6/9 over I2C): one pattern and the start of the off interval",
+    "description": "Register START of the random show (catalogue 56, rotary modes 6/9 over I2C): one pattern and the start of the off interval",
     "name": "reg_random_show",
     "run_ms": 26000,
     "settle_ms": 10.0,
-    "sha256": "c5748612abb64b9ab847b481ddff08331017338fac0ca75a92457ed81c8814f8",
+    "sha256": "6182e9bb6e4414ac2fadf8c8d21ca3a61ae20dcf64807f24a215d46f270c8a34",
     "timing_tolerance_cycles": 8000,
     "timing_tolerance_reason": "D-20: frames are scheduled from loop() (main-loop sequence engine), not delay(); settled frames land within ~0.2 ms of the specimen's"
   },
   "script": "/Users/davids/Documents/Source/git/magicpanel/runs/baseline-reg_random_show/stimulus.script",
-  "settled_hash": "3b8913f64f33eaf67d57a6c7f2f3ce314eaee1b0a8f8d30ac286aa166ae34a68",
-  "settled_states": 42,
-  "settled_timing_hash": "4b197094ee819c08f4284c19ce551cc603a3a05c80ce07a91997153f2c5cc910",
+  "settled_hash": "c9f9354bc568b4627300dc9381d2e26fc7bbc3112e2a5fe5281e2c37db7a103e",
+  "settled_states": 30,
+  "settled_timing_hash": "7bdbbee9f1d29e00f6ad12d85f3bab4544ad1a5a8099c5c46a97d5f6d999331c",
   "status": "ok",
-  "timing_hash": "30d75c1e9da066f05897a3c5c9af02d7cdaa487a93488e9bf2d385cbed5fb612",
-  "total_cycles": 416000002,
-  "total_ns": 26000000125.0
+  "timing_hash": "49594edfc9f23c51f2e9c47cfd64e5460b219af2690bad6cd842b6598abafe2e",
+  "total_cycles": 416000000,
+  "total_ns": 26000000000.0
 }

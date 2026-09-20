@@ -19,8 +19,10 @@
 
 **A random show stays dark.**
 : *Random show long* (position 7) plays one pattern and then stays dark (legacy behaviour).
-  *Random show* is dark for about a minute between patterns; frequent I2C polling restarts that
-  pause ([details](use/i2c-quickstart.md#common-tasks)).
+  *Random show* is dark for about a minute between patterns, which is normal. If it never lights
+  up again while a controller is connected, check the firmware version: on 0.12.0 any write more
+  often than that — a status poll included — restarts the pause. Upgrade, or poll without
+  writing ([details](use/i2c-quickstart.md#check-the-connection)).
 
 **The panel ignores one-byte commands.**
 : Legacy commands may have been switched off (`CONFIG` bit 0). Read register `0x30`. To restore

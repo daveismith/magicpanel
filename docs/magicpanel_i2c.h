@@ -1,7 +1,7 @@
 /*
- * magicpanel_i2c.h - Magic Panel I2C register interface, protocol v1.0
+ * magicpanel_i2c.h - Magic Panel I2C register interface, protocol v1.1
  *
- * Controller-side constants for talking to a Magic Panel running firmware v012.0 or later.
+ * Controller-side constants for talking to a Magic Panel running firmware v012.1 or later.
  * The protocol is described in docs/i2c-protocol.md; this header is its machine-readable part
  * and is also what the firmware test-suite reads, so the two cannot drift apart.
  *
@@ -35,7 +35,11 @@
 #define MP_I2C_ADDR_REG        0x09
 
 #define MP_PROTO_MAJOR_VALUE   1
-#define MP_PROTO_MINOR_VALUE   0
+#define MP_PROTO_MINOR_VALUE   1
+/* PROTO_MINOR 1: only MP_START and MP_STOP disturb a running sequence. On a panel answering 0
+ * (firmware v012.0) every write, the pointer write before a read included, restarts a random
+ * show's ~1 min dark pause; poll such a panel by setting the pointer once and then reading
+ * only. See section 5.4 of docs/i2c-protocol.md. */
 
 #define MP_CAP_LEGACY          0x01
 #define MP_CAP_REPEAT          0x02

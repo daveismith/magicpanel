@@ -1,7 +1,8 @@
-# Magic Panel I2C interface — protocol v1.0
+# Magic Panel I2C interface — protocol v1.1
 
-This document specifies how an I2C controller talks to a Magic Panel running firmware **v012.0
-or later**. It is written for two readers: authors of controller code (a droid's dome
+This document specifies how an I2C controller talks to a Magic Panel running firmware **v012.1
+or later**. (v012.0 answers protocol v1.0 and differs only as section 5.4 describes.) It is
+written for two readers: authors of controller code (a droid's dome
 controller, a test rig, a Python script) and maintainers of `MagicPanel.ino`, who implement it.
 Constants for C/C++ controllers are in [`magicpanel_i2c.h`](magicpanel_i2c.h); that header is
 normative for the numeric values below and is what the firmware test-suite uses.
@@ -183,10 +184,7 @@ main-loop engine introduced in the development sketch, see `docs/decisions.md` D
 - An iteration is one complete run of the sequence as listed in the catalogue, including the
   panel clear before/after that most sequences do.
 - The random shows (IDs 56, 57) never end by themselves; `repeat` is ignored for them.
-- **Every write** to the panel (including the pointer write before a status read) restarts the
-  random show's dark pause, as v010.5's handler did. Polling a random show every few seconds
-  therefore keeps it dark; poll rarely, or not at all, while one runs. Reads alone do not
-  affect it.
+- A random show is not disturbed by anything but `START` and `STOP`; see section 5.4.
 - When the run ends and a rotary/jumper mode is selected, that mode restarts (`SOURCE =
   GPIO_RESUME`) unless `CONFIG.GPIO_RESUME` is clear. The finished run's result is then no
   longer visible in `STATE`; compare `RUN_COUNTER` (section 6.2).
@@ -210,18 +208,59 @@ MAX7221 intensity `0`–`15` for both drivers, applied at once and kept until ch
 Values above 15: `BAD_VALUE`. At power-on it is loaded from `DEFAULT_BRIGHTNESS` (section 7).
 Brightness `0` is dim, not off; use `STOP` with mode 0 to blank.
 
+### 5.4 What disturbs a running sequence
+
+Only `START` and `STOP` change what the panel is playing. Reading any register, setting the
+register pointer, and writing `BRIGHTNESS`, `CONFIG`, `DEFAULT_BRIGHTNESS`, `ORIENTATION`,
+`SAVE` or `INFO_INDEX` leave the running sequence, the random shows' timing and the
+pseudo-random generator untouched, so a controller may poll and adjust the panel as often as it
+likes.
+
+Three things are worth knowing:
+
+- a **one-byte legacy command** (section 4) does still advance the generator and restart a
+  random show's dark pause, exactly as firmware v010.5 did. This is deliberate: that path exists
+  for v010.5 controllers, quirks included;
+- `CONFIG` with `GPIO_ENABLE` going from clear to set starts the selected rotary/jumper mode,
+  which is what that bit is for (section 7);
+- `SAVE` writes the EEPROM bytes that changed, about 3.4 ms each, during which no frame is
+  clocked out. A sequence continues, but one frame can land a few milliseconds late. Save
+  settings between sequences if that matters.
+
+#### Talking to firmware v012.0 (protocol v1.0) safely
+
+On v012.0 **every** message — a register write, the one-byte pointer write before a read, even
+an empty write — restarted a random show's dark pause, because the firmware applied v010.5's
+per-message side effect to register traffic too. The pause is around a minute, so a controller
+that writes more often than that keeps the panel dark for as long as it keeps talking, while
+the status block still reports the show as running.
+
+Reads alone were always harmless, and the register pointer does not move by itself, so a
+controller that must support v012.0 can poll without writing at all:
+
+```
+write [0x90]                 ; once: pointer := STATUS
+loop:
+    read 16                  ; as often as you like, no write
+```
+
+Re-address only when you need a different register, and prefer to make configuration changes
+(brightness, orientation, `SAVE`) when no random show is running. Read `PROTO_MINOR` (section
+6.1) to tell the two apart: `0` needs this care, `1` does not. The same applies while a
+rotary/jumper random show is running (codes 6, 7 and 9), not only to shows started over I2C.
+
 ---
 
 ## 6. Identity and status
 
 ### 6.1 Identity (0x00–0x09)
 
-| Reg | Name | Value in v1.0 |
+| Reg | Name | Value in v1.1 |
 |---|---|---|
 | 0x00–0x01 | `WHO_AM_I` | `0x4D 0x50` (`"MP"`) |
 | 0x02 | `PROTO_MAJOR` | 1 — incremented for incompatible changes |
-| 0x03 | `PROTO_MINOR` | 0 — incremented for compatible additions |
-| 0x04–0x06 | `FW_MAJOR/MINOR/PATCH` | 0, 12, 0 (firmware v012.0, which follows v011) |
+| 0x03 | `PROTO_MINOR` | 1 — incremented for compatible additions (1: register accesses no longer disturb a running sequence, section 5.4) |
+| 0x04–0x06 | `FW_MAJOR/MINOR/PATCH` | 0, 12, 1 (firmware v012.1, which follows v011) |
 | 0x07 | `SEQ_COUNT` | 58 |
 | 0x08 | `CAPS` | `0x3F`: bit 0 legacy commands, bit 1 repeat/loop, bit 2 brightness, bit 3 catalogue names, bit 4 EEPROM configuration, bit 5 orientation |
 | 0x09 | `I2C_ADDR` | `0x14` |
@@ -312,7 +351,7 @@ An ID ≥ `SEQ_COUNT` records `BAD_VALUE` and leaves `INFO_INDEX` unchanged.
 | 2–5 | `INFO_LENGTH_MS` | length of one iteration in ms, measured, including frame transfer time; `0xFFFFFFFF` for `LOOPS` |
 | 6–21 | `INFO_NAME` | ASCII, NUL-padded, no terminator if exactly 16 characters |
 
-### 8.1 Catalogue v1.0
+### 8.1 Catalogue v1.1
 
 Lengths are what `INFO_LENGTH_MS` returns. They are measured, not computed from the nominal
 delays: `tools/measure_lengths.py` starts each sequence on the simulated panel and reads the
@@ -342,7 +381,7 @@ command 3. Sequences flagged `VARIES` wait for random times, so their length is 
 | 17 | `Expand ring` | | 5213 | ring grows from the centre |
 | 18 | `Compress` | | 5213 | filled square shrinks to the centre |
 | 19 | `Compress ring` | | 5213 | ring shrinks to the centre |
-| 20 | `Cross` | HOLD | 3024 | an X for 3 s |
+| 20 | `Cross` | HOLD | 3023 | an X for 3 s |
 | 21 | `Cylon column` | | 4150 | column sweeps left-right |
 | 22 | `Cylon row` | | 4150 | row sweeps up-down |
 | 23 | `Eye scan` | | 3885 | row then column scan |
@@ -352,20 +391,20 @@ command 3. Sequences flagged `VARIES` wait for random times, so their length is 
 | 27 | `Flash halves` | | 3337 | left/right halves alternate |
 | 28 | `Flash quadrants` | | 3337 | diagonal quadrants alternate |
 | 29 | `Two loop` | | 5122 | two dots circle the panel |
-| 30 | `One loop` | | 5122 | one dot circles the panel |
+| 30 | `One loop` | | 5121 | one dot circles the panel |
 | 31 | `Test fill` | | 4837 | fill pixel by pixel, then clear |
-| 32 | `Test pixel` | | 2427 | one pixel walks the panel |
-| 33 | `Symbol AI` | HOLD | 3024 | Aurebesh "AI" logo, 3 s |
+| 32 | `Test pixel` | | 2426 | one pixel walks the panel |
+| 33 | `Symbol AI` | HOLD | 3023 | Aurebesh "AI" logo, 3 s |
 | 34 | `Symbol 2GWD` | HOLD | 4047 | "2GWD" logo, letter by letter |
 | 35 | `Quadrant 1` | | 4247 | quadrants TL, TR, BR, BL |
 | 36 | `Quadrant 2` | | 4247 | quadrants TR, TL, BL, BR |
 | 37 | `Quadrant 3` | | 4323 | quadrants TR, BR, BL, TL |
 | 38 | `Quadrant 4` | | 4323 | quadrants TL, BL, BR, TR |
-| 39 | `Random pixel` | RANDOM | 6638 | single random pixels |
+| 39 | `Random pixel` | RANDOM | 6636 | single random pixels |
 | 40 | `Countdown 9` | | 10085 | digits 9 down to 0, one a second |
 | 41 | `Countdown 3` | | 4039 | digits 3 down to 0, one a second |
-| 42 | `Flicker` | RANDOM, VARIES | 2092 | whole panel flickers at random, like the MarcDuino alert |
-| 43 | `Flicker long` | RANDOM, VARIES | 4228 | the same, twice as long |
+| 42 | `Flicker` | RANDOM, VARIES | 2081 | whole panel flickers at random, like the MarcDuino alert |
+| 43 | `Flicker long` | RANDOM, VARIES | 4169 | the same, twice as long |
 | 44 | `Smile` | HOLD | 1023 | smiley face, 1 s |
 | 45 | `Sad face` | HOLD | 1023 | sad face, 1 s |
 | 46 | `Heart` | HOLD | 1023 | heart, 1 s |
@@ -374,10 +413,10 @@ command 3. Sequences flagged `VARIES` wait for random times, so their length is 
 | 49 | `Compress in wipe` | | 8099 | the same, each fill then cleared in the same order |
 | 50 | `Explode out` | | 4576 | panel fills from the centre out, half a row at a time |
 | 51 | `Explode out wipe` | | 9099 | the same, each fill then cleared in the same order |
-| 52 | `VU meter bottom` | RANDOM | 4710 | bouncing bars rising from the bottom |
+| 52 | `VU meter bottom` | RANDOM | 4709 | bouncing bars rising from the bottom |
 | 53 | `VU meter left` | RANDOM | 4710 | bouncing bars from the left |
 | 54 | `VU meter top` | RANDOM | 4709 | bouncing bars hanging from the top |
-| 55 | `VU meter right` | RANDOM | 4710 | bouncing bars from the right |
+| 55 | `VU meter right` | RANDOM | 4709 | bouncing bars from the right |
 | 56 | `Random show` | LOOPS, RANDOM | indefinite | a random pattern about once a minute, dark in between (rotary 6, jumper 2) |
 | 57 | `Random show long` | LOOPS, RANDOM | indefinite | one random pattern, then dark: its long pause overflows (legacy behaviour, rotary 7) |
 
@@ -416,8 +455,8 @@ Bytes are shown as they go on the wire after the address.
 
 ```
 write [0x80]                 ; pointer := WHO_AM_I
-read 10  -> 4D 50 01 00 00 0C 00 3A 3F 14
-            "MP" proto 1.0  fw 0.12.0  58 seqs  caps  addr
+read 10  -> 4D 50 01 01 00 0C 01 3A 3F 14
+            "MP" proto 1.1  fw 0.12.1  58 seqs  caps  addr
 ```
 
 Anything other than `4D 50` means firmware v011 or older: use legacy commands only.

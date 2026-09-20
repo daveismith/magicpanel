@@ -6,6 +6,24 @@ All notable changes to the Magic Panel firmware. The format follows
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-20
+
+### Fixed
+
+- Only *start* and *stop* now affect what the panel is playing. Reading the status, changing the
+  brightness or orientation and saving settings used to restart a random show's dark pause, so a
+  controller that polled the panel every few seconds kept it dark for as long as it kept talking,
+  while the status said the show was running. One-byte commands are unchanged: they still behave
+  exactly as firmware v010.5 did.
+- A random sequence (*Fade out/in*, *Random pixel*, the VU meters, the flickers) now draws the
+  same pictures however much the controller talks to the panel.
+
+### Changed
+
+- I2C protocol version 1.1. Controllers that must also work with firmware 0.12.0 can read
+  `PROTO_MINOR`: on `0`, set the register pointer once and then only read, which never disturbed
+  a show even on 0.12.0 (see the protocol reference, section 5.4).
+
 ## [0.12.0] - 2026-09-19
 
 First release of this firmware, a compatible successor to IA-PARTS Magic Panel FX v010.5 and to

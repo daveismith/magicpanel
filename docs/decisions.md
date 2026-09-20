@@ -299,3 +299,26 @@ flicker, compress in, explode out, VU meters), not that firmware's serial/JawaLi
   cannot be exact. Catalogue flag bit 4 `VARIES` says so, and the length test allows ±10% for
   them.
 
+
+**D-27 — Only START and STOP disturb a running sequence (2026-09-20, owner decision).** v010.5's
+`receiveEvent` advanced `random()` and reset `RandomTime` on *every* message, and D-16 kept that
+for the dev sketch's whole I2C surface. Measured consequence: a random show pauses ~62 s between
+patterns, and each write restarts that wait, so a controller polling status twice a second held
+the panel dark indefinitely while `STATE` still read RUNNING (240 s in simulation: 19.6 s lit
+untouched, 5.1 s and then nothing when polled).
+- *Rule.* A one-byte legacy command keeps v010.5's side effect exactly — that path exists for
+  v010.5 controllers, quirks included. Register accesses (pointer sets, reads, `BRIGHTNESS`,
+  `CONFIG`, `DEFAULT_BRIGHTNESS`, `ORIENTATION`, `SAVE`, `INFO_INDEX`, empty probes) touch
+  neither the random state nor the PRNG. `receiveEvent()` therefore counts only accepted
+  one-byte commands.
+- *Trap.* `consumeI2C()`'s early return did not test `pendAction`; it relied on the counter that
+  register writes no longer increment. Without adding that test, register START/STOP would be
+  dropped whenever nothing else was pending.
+- *Protocol.* `PROTO_MINOR` 1. A controller that must also drive v012.0 sets the register pointer
+  once and then only reads: reads never disturbed a show, and `requestEvent()` does not move the
+  pointer. Spec section 5.4 says so.
+- *Not changed.* The `SAVE` EEPROM write still blocks ~3.4 ms per changed byte, so a frame can
+  land late; and enabling `GPIO_ENABLE` still starts the selected rotary/jumper mode, which is
+  what that bit is for. Both are documented rather than "fixed".
+- *Baselines.* `reg_random_show` picks a different pattern, because its START no longer advances
+  the PRNG first: re-baselined with that reason.

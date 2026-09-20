@@ -15,6 +15,8 @@ moves.
   stop a fitted jumper from starting a show.
 
 !!! note "The random shows"
-    *Random show* plays a random pattern about once a minute and is dark in between.
+    *Random show* plays a random pattern about once a minute and is dark in between. A connected
+    controller may poll the panel while it runs without interrupting it (firmware 0.12.1 and
+    later).
     *Random show long* (position 7) plays **one** pattern and then stays dark: its long pause
     overflows, exactly as in firmware v010.5.

@@ -1,6 +1,10 @@
 // Magic Panel FX by IA-PARTS.com 
 //
 //// Release History
+// v012.1 - Register accesses no longer disturb a running sequence: only START and STOP do.
+//          Polling status, changing brightness or saving settings used to restart a random
+//          show's dark pause (v010.5's per-message side effect), which kept it dark. Protocol
+//          v1.1.
 // v012.0 - I2C register interface (docs/i2c-protocol.md): start/stop/status/catalogue/brightness,
 //          legacy one-byte commands kept; every animation runs from loop(); ORIENTATION setting
 //          turns the picture 180 degrees for panels installed the other way up. Includes the
@@ -88,10 +92,10 @@ int NumLoops=2;
 
 // Register interface (docs/i2c-protocol.md; values mirror docs/magicpanel_i2c.h)
 #define PROTO_MAJOR 1
-#define PROTO_MINOR 0
+#define PROTO_MINOR 1
 #define FW_MAJOR    0
 #define FW_MINOR    12
-#define FW_PATCH    0
+#define FW_PATCH    1
 #define CAPS        0x3F          // legacy, repeat, brightness, names, EEPROM config, orientation
 #define REG_BIT     0x80
 #define MAX_WRITE_DATA 8
@@ -395,7 +399,7 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { 0,                          5213,    "Expand ring" },
   { 0,                          5213,    "Compress" },
   { 0,                          5213,    "Compress ring" },
-  { INFO_HOLD,                  3024,    "Cross" },
+  { INFO_HOLD,                  3023,    "Cross" },
   { 0,                          4150,    "Cylon column" },
   { 0,                          4150,    "Cylon row" },
   { 0,                          3885,    "Eye scan" },
@@ -405,20 +409,20 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { 0,                          3337,    "Flash halves" },
   { 0,                          3337,    "Flash quadrants" },
   { 0,                          5122,    "Two loop" },
-  { 0,                          5122,    "One loop" },
+  { 0,                          5121,    "One loop" },
   { 0,                          4837,    "Test fill" },
-  { 0,                          2427,    "Test pixel" },
-  { INFO_HOLD,                  3024,    "Symbol AI" },
+  { 0,                          2426,    "Test pixel" },
+  { INFO_HOLD,                  3023,    "Symbol AI" },
   { INFO_HOLD,                  4047,    "Symbol 2GWD" },
   { 0,                          4247,    "Quadrant 1" },
   { 0,                          4247,    "Quadrant 2" },
   { 0,                          4323,    "Quadrant 3" },
   { 0,                          4323,    "Quadrant 4" },
-  { INFO_RANDOM,                6638,    "Random pixel" },
+  { INFO_RANDOM,                6636,    "Random pixel" },
   { 0,                          10085,   "Countdown 9" },
   { 0,                          4039,    "Countdown 3" },
-  { INFO_RANDOM | INFO_VARIES,  2092,    "Flicker" },
-  { INFO_RANDOM | INFO_VARIES,  4228,    "Flicker long" },
+  { INFO_RANDOM | INFO_VARIES,  2081,    "Flicker" },
+  { INFO_RANDOM | INFO_VARIES,  4169,    "Flicker long" },
   { INFO_HOLD,                  1023,    "Smile" },
   { INFO_HOLD,                  1023,    "Sad face" },
   { INFO_HOLD,                  1023,    "Heart" },
@@ -427,10 +431,10 @@ const SeqInfo SEQ_INFO[SEQ_COUNT] PROGMEM = {
   { 0,                          8099,    "Compress in wipe" },
   { 0,                          4576,    "Explode out" },
   { 0,                          9099,    "Explode out wipe" },
-  { INFO_RANDOM,                4710,    "VU meter bottom" },
+  { INFO_RANDOM,                4709,    "VU meter bottom" },
   { INFO_RANDOM,                4710,    "VU meter left" },
   { INFO_RANDOM,                4709,    "VU meter top" },
-  { INFO_RANDOM,                4710,    "VU meter right" },
+  { INFO_RANDOM,                4709,    "VU meter right" },
   { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show" },
   { INFO_LOOPS | INFO_RANDOM,   LEN_INDEFINITE,"Random show long" },
 };
@@ -474,7 +478,9 @@ byte gpioCode = 0;                // accepted rotary/jumper code (0 = no GPIO mo
 byte gpioCandidate = 0;           // code currently being debounced
 unsigned long gpioCandidateSince = 0;
 
-volatile byte i2cCount = 0;       // writes received since loop() last looked
+volatile byte legacyWrites = 0;   // one-byte legacy commands received since loop() last looked
+volatile bool i2cPending = false; // receiveEvent posted something for consumeI2C to carry out.
+                                  // One flag, because loop() tests it on every pass.
 
 byte patId = P_NONE;
 int patA = 0;
@@ -649,14 +655,17 @@ void stepEngine() {
   if (gpioCode != 0 && (cfgConfig & CFG_GPIO_ENABLE) && (cfgConfig & CFG_GPIO_RESUME)) startGpio(gpioCode, true);
 }
 
-// I2C: carry out what receiveEvent posted. Each received write consumes one random() and resets
-// RandomTime, as the original receiveEvent did; then the last start/stop request, a brightness
-// change, a configuration change and a SAVE are applied, in that order.
+// I2C: carry out what receiveEvent posted. Each one-byte legacy command consumes one random()
+// and resets RandomTime, as the original receiveEvent did for every message; then the last
+// start/stop request, a brightness change, a configuration change and a SAVE are applied, in
+// that order. pendAction is part of the test below: register START/STOP arrive without
+// incrementing legacyWrites.
 void consumeI2C() {
-  if (i2cCount == 0 && !pendBrightness && pendSave == 0 && cfgConfig == cfgApplied) return;
+  if (!i2cPending) return;
   noInterrupts();
-  byte n = i2cCount;
-  i2cCount = 0;
+  i2cPending = false;
+  byte n = legacyWrites;
+  legacyWrites = 0;
   byte act = pendAction;
   pendAction = ACT_NONE;
   byte seq = pendSeq, repeat = pendRepeat, end = pendEnd, source = pendSource;
@@ -1759,7 +1768,8 @@ void writeRegisters(byte reg, const byte* d, byte n) {
       }
   }
   if (err) i2cError(err);
-}
+  else i2cPending = true;      // START/STOP/SAVE/BRIGHTNESS/CONFIG need consumeI2C; for the
+}                              // others it costs one pass that finds nothing to do
 
 // A write: byte 0 with bit 7 set addresses a register, otherwise it is a legacy command. All bytes
 // are drained, so a long or malformed write can no longer leave the receiver deaf.
@@ -1771,17 +1781,23 @@ void receiveEvent(int count) {
     if (len < sizeof buf) buf[len] = b;
     if (len < 255) len++;
   }
-  i2cCount++;                              // every write advances random() once (D-16)
   if (len == 0) return;                    // address-only probe
   if (!(buf[0] & REG_BIT)) {
     if (len > 1) i2cError(ERR_BAD_LENGTH);
     else if (!(cfgConfig & CFG_LEGACY)) i2cError(ERR_LEGACY_OFF);
-    else if (buf[0] < SEQ_RANDOM_SHOW) {
-      pendAction = ACT_START;
-      pendSeq = buf[0];
-      pendRepeat = 1;
-      pendEnd = END_DEFAULT;
-      pendSource = SRC_LEGACY;
+    else {
+      // A one-byte command is what a v010.5 controller sends, so it keeps v010.5's side effect:
+      // every message advanced random() once and restarted the Random() show's wait (D-16).
+      // Register accesses do not, so polling cannot keep a random show dark (D-27).
+      legacyWrites++;
+      i2cPending = true;
+      if (buf[0] < SEQ_RANDOM_SHOW) {
+        pendAction = ACT_START;
+        pendSeq = buf[0];
+        pendRepeat = 1;
+        pendEnd = END_DEFAULT;
+        pendSource = SRC_LEGACY;
+      }
     }
     return;
   }
