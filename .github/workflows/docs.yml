@@ -98,3 +98,11 @@ jobs:
           git fetch origin gh-pages --depth=1 || true
           cp docs/magicpanel_i2c.h manual/reference/magicpanel_i2c.h
           .venv/bin/mike deploy --push dev
+          # First deploy: without a default version the site root is a 404. Point it at `dev`
+          # until a release publishes `latest`, which set-default then takes over.
+          git fetch origin gh-pages --depth=1
+          if git show FETCH_HEAD:index.html >/dev/null 2>&1; then
+            echo "root redirect already published; leaving the default alone"
+          else
+            .venv/bin/mike set-default --push dev
+          fi
